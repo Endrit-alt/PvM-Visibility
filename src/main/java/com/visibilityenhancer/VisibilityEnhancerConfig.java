@@ -35,5 +35,13 @@ public interface VisibilityEnhancerConfig extends Config
 	default int proximityRange() { return 10; }
 
 	@ConfigItem(keyName = "ignoreFriends", name = "Ignore Friends", position = 13, section = othersSection, description = "Don't ghost your friends")
-	default boolean ignoreFriends() { return true; }
+	default boolean ignoreFriends() { return false; }
+
+	// --- NEW OPTIMIZATION SETTINGS ---
+	@ConfigItem(keyName = "limitAffectedPlayers", name = "Limit affected players", position = 14, section = othersSection, description = "Limit the number of players that receive the ghosting effect to save performance")
+	default boolean limitAffectedPlayers() { return true; }
+
+	@Range(min = 1, max = 100)
+	@ConfigItem(keyName = "maxAffectedPlayers", name = "Max affected players", position = 15, section = othersSection, description = "The maximum number of players to ghost at once")
+	default int maxAffectedPlayers() { return 8; }
 }

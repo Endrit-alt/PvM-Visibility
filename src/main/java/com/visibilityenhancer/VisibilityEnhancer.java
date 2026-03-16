@@ -2,8 +2,11 @@ package com.visibilityenhancer;
 
 import com.google.inject.Provides;
 import java.awt.Color;
+import java.util.ArrayList; // Added
 import java.util.Arrays;
+import java.util.Comparator; // Added
 import java.util.HashSet;
+import java.util.List; // Added
 import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
@@ -94,14 +97,11 @@ public class VisibilityEnhancer extends Plugin
 			return;
 		}
 
-		Set<Player> playersInRange = new HashSet<>();
-
+		// 1. Identify all players within range
+		List<Player> eligiblePlayers = new ArrayList<>();
 		for (Player player : client.getPlayers())
 		{
-			if (player == null || player == local)
-			{
-				continue;
-			}
+			if (player == null || player == local) continue;
 
 			if (ignoreFriends && isFriend(player))
 			{
@@ -113,21 +113,31 @@ public class VisibilityEnhancer extends Plugin
 			}
 
 			WorldPoint playerPoint = player.getWorldLocation();
-			if (playerPoint == null)
+			if (playerPoint != null && localPoint.distanceTo(playerPoint) <= proximityRange)
 			{
-				continue;
-			}
-
-			if (localPoint.distanceTo(playerPoint) <= proximityRange)
-			{
-				playersInRange.add(player);
-				applyOtherOpacity(player, playerOpacity);
+				eligiblePlayers.add(player);
 			}
 		}
 
+		// 2. Apply Optimization: Sort by distance and sublist to max count
+		if (config.limitAffectedPlayers() && eligiblePlayers.size() > config.maxAffectedPlayers())
+		{
+			eligiblePlayers.sort(Comparator.comparingInt(p ->
+					localPoint.distanceTo(p.getWorldLocation())));
+
+			eligiblePlayers = eligiblePlayers.subList(0, config.maxAffectedPlayers());
+		}
+
+		// 3. Apply the effect to the chosen subset
+		Set<Player> playersInRange = new HashSet<>(eligiblePlayers);
+		for (Player player : playersInRange)
+		{
+			applyOtherOpacity(player, playerOpacity);
+		}
+
+		// 4. Restore players who are no longer in the "top X closest" list
 		Set<Player> noLongerGhosted = new HashSet<>(ghostedPlayers);
 		noLongerGhosted.removeAll(playersInRange);
-
 		for (Player player : noLongerGhosted)
 		{
 			restoreOtherOpacity(player);
