@@ -127,6 +127,15 @@ public interface VisibilityEnhancerConfig extends Config
 	)
 	default boolean hideGhostExtras() { return false; }
 
+	@ConfigItem(
+			keyName = "customTransparentPrayers",
+			name = "Custom Transparent Prayers",
+			position = 5,
+			section = extrasSection,
+			description = "Hides native overheads and HP bars, replacing them with transparent prayer sprites"
+	)
+	default boolean customTransparentPrayers() { return false; }
+
 
 	// --- OUTLINE SECTION ---
 	@ConfigSection(
@@ -182,6 +191,15 @@ public interface VisibilityEnhancerConfig extends Config
 			description = "Only shows one outline per tile if players are standing on each other"
 	)
 	default boolean hideStackedOutlines() { return true; }
+
+	@ConfigItem(
+			keyName = "useFloorTileOutline",
+			name = "Use Floor Tile Outline",
+			position = 6,
+			section = outlineSection,
+			description = "Draws a square on the floor instead of outlining the 3D body"
+	)
+	default boolean useFloorTileOutline() { return false; }
 
 
 	// --- OUTLINE STYLE SECTION ---
@@ -240,4 +258,13 @@ public interface VisibilityEnhancerConfig extends Config
 			description = "Softness/Feathering of the glow layer"
 	)
 	default int glowFeather() { return 4; }
+
+	@ConfigItem(
+			keyName = "fillFloorTile",
+			name = "Fill Floor Tile",
+			position = 6,
+			section = styleSection,
+			description = "Fills the inside of the floor tile if 'Use Floor Tile Outline' is enabled"
+	)
+	default boolean fillFloorTile() { return false; }
 }
