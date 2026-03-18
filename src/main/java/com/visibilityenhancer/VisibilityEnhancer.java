@@ -242,7 +242,9 @@ public class VisibilityEnhancer extends Plugin
 		boolean hideOthersClothes = config.othersClearGround();
 		for (Player p : currentInRange)
 		{
-			if (opacity < 100) applyOpacity(p, opacity);
+			int effectiveOpacity = hideOthersClothes ? 100 : opacity;
+
+			if (effectiveOpacity < 100) applyOpacity(p, effectiveOpacity);
 			else restoreOpacity(p);
 
 			if (hideOthersClothes) applyClothingFilter(p);
@@ -269,7 +271,7 @@ public class VisibilityEnhancer extends Plugin
 	{
 		Player local = client.getLocalPlayer();
 		if (local == null) return;
-		int selfOpacity = config.selfOpacity();
+		int selfOpacity = config.selfClearGround() ? 100 : config.selfOpacity();
 		if (selfOpacity < 100) applyOpacity(local, selfOpacity);
 		else restoreOpacity(local);
 
