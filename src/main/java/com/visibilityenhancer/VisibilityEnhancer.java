@@ -23,7 +23,6 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class VisibilityEnhancer extends Plugin
 {
-	// OPTIMIZATION: 20 seconds / 600ms per tick = ~33 ticks. Tied to game engine instead of OS clock.
 	private static final int INTERACTION_TIMEOUT_TICKS = 33;
 
 	@Inject
@@ -48,7 +47,7 @@ public class VisibilityEnhancer extends Plugin
 	private final Set<Player> ghostedPlayers = new HashSet<>();
 
 	private final Map<Player, int[]> originalEquipmentMap = new HashMap<>();
-	private final Map<Player, Integer> lastInteractionMap = new HashMap<>(); // Now stores Tick Count instead of Long MS
+	private final Map<Player, Integer> lastInteractionMap = new HashMap<>();
 	private final Set<Projectile> myProjectiles = new HashSet<>();
 	private final Hooks.RenderableDrawListener drawListener = this::shouldDraw;
 
@@ -169,7 +168,6 @@ public class VisibilityEnhancer extends Plugin
 		if (config.selfClearGround()) applyClothingFilter(local);
 		else if (originalEquipmentMap.containsKey(local)) restoreClothing(local);
 
-		// OPTIMIZATION: Use LocalPoint for raw 2D scene coordinates
 		LocalPoint localLoc = local.getLocalLocation();
 		if (localLoc == null)
 		{
@@ -207,7 +205,6 @@ public class VisibilityEnhancer extends Plugin
 
 			LocalPoint pLoc = p.getLocalLocation();
 
-			// OPTIMIZATION: Pure Chebyshev distance math (0 object allocation, exact OSRS tile distance)
 			if (pLoc != null)
 			{
 				int dist = Math.max(Math.abs(localX - pLoc.getSceneX()), Math.abs(localY - pLoc.getSceneY()));
@@ -220,7 +217,6 @@ public class VisibilityEnhancer extends Plugin
 
 		if (config.limitAffectedPlayers() && inRange.size() > config.maxAffectedPlayers())
 		{
-			// Sort using the same high-speed Chebyshev distance
 			inRange.sort((p1, p2) ->
 			{
 				LocalPoint lp1 = p1.getLocalLocation();
@@ -271,6 +267,7 @@ public class VisibilityEnhancer extends Plugin
 	{
 		Player local = client.getLocalPlayer();
 		if (local == null) return;
+
 		int selfOpacity = config.selfClearGround() ? 100 : config.selfOpacity();
 		if (selfOpacity < 100) applyOpacity(local, selfOpacity);
 		else restoreOpacity(local);
@@ -282,8 +279,7 @@ public class VisibilityEnhancer extends Plugin
 			Actor target = proj.getInteracting();
 			if (target != null && target != local)
 			{
-				int alpha = myProjectiles.contains(proj) ?
-						myProjAlpha : othersAlpha;
+				int alpha = myProjectiles.contains(proj) ? myProjAlpha : othersAlpha;
 
 				Model m = proj.getModel();
 				if (m != null)
@@ -311,20 +307,16 @@ public class VisibilityEnhancer extends Plugin
 		{
 			Player player = (Player) renderable;
 			boolean isGhost = ghostedPlayers.contains(player);
-			boolean isLocal = player == cachedLocalPlayer;
 
 			if (drawingUI)
 			{
-				// FORCE FALSE: Completely kills native prayers, HP bars, AND native text
-				boolean hideSelfUI = isLocal && config.selfTransparentPrayers();
 				boolean hideGhostUI = isGhost && config.othersTransparentPrayers();
 
-				if (hideSelfUI || hideGhostUI)
+				if (hideGhostUI)
 				{
 					return false;
 				}
 
-				// Also forcefully kill 2D UI for ghost extras so the native prayer doesn't show when typing
 				if (isGhost && config.hideGhostExtras())
 				{
 					return false;

@@ -38,11 +38,9 @@ public class VisibilityEnhancerOverlay extends Overlay
 	private final ModelOutlineRenderer modelOutlineRenderer;
 	private final SpriteManager spriteManager;
 
-	// OPTIMIZATION: Reusable collections
 	private final Set<WorldPoint> renderedTiles = new HashSet<>();
 	private final List<Player> sortedGhosts = new ArrayList<>(32);
 
-	// OPTIMIZATION: Object Caching to prevent GC stutters
 	private int cachedOutlineWidth = -1;
 	private int cachedGlowWidth = -1;
 	private BasicStroke primaryStroke;
@@ -73,7 +71,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 		WorldPoint localPoint = local != null ? local.getWorldLocation() : null;
 		LocalPoint localLocalPoint = local != null ? local.getLocalLocation() : null;
 
-		// --- Outline Rendering: Local Player ---
 		if (local != null && config.selfOutline())
 		{
 			if (config.selfUseFloorTileOutline())
@@ -86,19 +83,16 @@ public class VisibilityEnhancerOverlay extends Overlay
 			}
 		}
 
-		// --- Outline Rendering: Ghosted Players ---
 		if (config.othersOutline())
 		{
 			renderedTiles.clear();
 			boolean hideStacked = config.hideStackedOutlines();
-			boolean useFloorTile = config.othersUseFloorTileOutline(); // Updated method call
+			boolean useFloorTile = config.othersUseFloorTileOutline();
 			Color othersColor = config.othersOutlineColor();
 
-			// OPTIMIZATION: Clear and reuse list instead of instantiating new ArrayList
 			sortedGhosts.clear();
 			sortedGhosts.addAll(plugin.getGhostedPlayers());
 
-			// OPTIMIZATION: Use LocalPoint for sorting (Avoids heavy 3D plane translation math)
 			if (localLocalPoint != null)
 			{
 				sortedGhosts.sort((p1, p2) ->
@@ -134,19 +128,9 @@ public class VisibilityEnhancerOverlay extends Overlay
 			}
 		}
 
-		// --- Transparent Prayer & Text Rendering ---
-		boolean selfCustomPrayers = config.selfTransparentPrayers();
 		boolean othersCustomPrayers = config.othersTransparentPrayers();
 		boolean hideGhostExtras = config.hideGhostExtras();
 
-		// Handle local player
-		if (selfCustomPrayers && local != null)
-		{
-			drawTransparentPrayer(graphics, local, 100);
-			drawOverheadText(graphics, local);
-		}
-
-		// Handle ghosted players
 		if (othersCustomPrayers || hideGhostExtras)
 		{
 			for (Player player : plugin.getGhostedPlayers())
@@ -177,7 +161,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 		Polygon poly = Perspective.getCanvasTilePoly(client, player.getLocalLocation());
 		if (poly != null)
 		{
-			// OPTIMIZATION: Lazy evaluate Colors and Strokes to avoid instantiating them 50x a second
 			if (cachedColor == null || !cachedColor.equals(color))
 			{
 				cachedColor = color;
@@ -197,7 +180,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 				glowStroke = new BasicStroke(cachedOutlineWidth + cachedGlowWidth);
 			}
 
-			// Add a thicker, more transparent stroke behind the primary line to mimic the "Glow" effect
 			if (config.enableGlow())
 			{
 				graphics.setColor(cachedGlowColor);
@@ -205,12 +187,10 @@ public class VisibilityEnhancerOverlay extends Overlay
 				graphics.draw(poly);
 			}
 
-			// Draw the primary outline border using your custom width
 			graphics.setColor(cachedColor);
 			graphics.setStroke(primaryStroke);
 			graphics.draw(poly);
 
-			// Optionally fill the inside of the tile
 			if (config.fillFloorTile())
 			{
 				graphics.setColor(cachedFillColor);

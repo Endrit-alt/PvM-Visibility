@@ -128,22 +128,13 @@ public interface VisibilityEnhancerConfig extends Config
 	default boolean hideGhostExtras() { return false; }
 
 	@ConfigItem(
-			keyName = "customTransparentPrayers", // Kept for backwards compatibility
+			keyName = "customTransparentPrayers",
 			name = "Transparent Prayers (Ghosts)",
 			position = 5,
 			section = extrasSection,
 			description = "Hides native overheads and HP bars for ghosts, replacing them with transparent prayer sprites"
 	)
 	default boolean othersTransparentPrayers() { return false; }
-
-	@ConfigItem(
-			keyName = "selfTransparentPrayers",
-			name = "Transparent Prayers (Self)",
-			position = 6,
-			section = extrasSection,
-			description = "Hides your native overheads and HP bars, replacing them with transparent prayer sprites"
-	)
-	default boolean selfTransparentPrayers() { return false; }
 
 
 	// --- OUTLINE SECTION ---
@@ -202,7 +193,7 @@ public interface VisibilityEnhancerConfig extends Config
 	default boolean hideStackedOutlines() { return true; }
 
 	@ConfigItem(
-			keyName = "useFloorTileOutline", // Kept the same so current users keep their setting
+			keyName = "useFloorTileOutline",
 			name = "Ghosts Floor Tile",
 			position = 6,
 			section = outlineSection,
