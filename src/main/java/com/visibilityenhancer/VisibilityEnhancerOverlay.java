@@ -16,6 +16,7 @@ import java.util.Set;
 import javax.inject.Inject;
 import net.runelite.api.Client;
 import net.runelite.api.HeadIcon;
+import net.runelite.api.Model;
 import net.runelite.api.Player;
 import net.runelite.api.Point;
 import net.runelite.api.SpriteID;
@@ -67,7 +68,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 		setPosition(OverlayPosition.DYNAMIC);
 		setLayer(OverlayLayer.ABOVE_SCENE);
 		setPriority(OverlayPriority.HIGH);
-
 	}
 
 	@Override
@@ -80,14 +80,18 @@ public class VisibilityEnhancerOverlay extends Overlay
 
 		if (local != null && config.selfOutline())
 		{
-			if (config.selfUseFloorTileOutline())
+			Model localModel = local.getModel();
+			// Only draw self outline/floor tile if there is NO color override active
+			if (localModel == null || localModel.getOverrideAmount() == 0)
 			{
-				renderFloorTile(graphics, local, config.selfOutlineColor());
-
-			}
-			else
-			{
-				renderOutlineLayers(local, config.selfOutlineColor());
+				if (config.selfUseFloorTileOutline())
+				{
+					renderFloorTile(graphics, local, config.selfOutlineColor());
+				}
+				else
+				{
+					renderOutlineLayers(local, config.selfOutlineColor());
+				}
 			}
 		}
 
@@ -111,13 +115,19 @@ public class VisibilityEnhancerOverlay extends Overlay
 
 					return Integer.compare(lp2.distanceTo(localLocalPoint), lp1.distanceTo(localLocalPoint));
 				});
-
 			}
 
 			for (Player player : sortedGhosts)
 			{
 				WorldPoint playerPoint = player.getWorldLocation();
 				if (playerPoint == null) continue;
+
+				// Only draw outline/floor tile if the ghost player has NO color override active
+				Model pModel = player.getModel();
+				if (pModel != null && pModel.getOverrideAmount() != 0)
+				{
+					continue;
+				}
 
 				if (hideStacked)
 				{
@@ -133,7 +143,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 				else
 				{
 					renderOutlineLayers(player, othersColor);
-
 				}
 			}
 		}
@@ -143,12 +152,34 @@ public class VisibilityEnhancerOverlay extends Overlay
 
 		if (othersCustomPrayers || hideGhostExtras)
 		{
+			// Track which tiles we have already drawn a prayer on
+			Set<WorldPoint> renderedPrayerTiles = new HashSet<>();
+
 			for (Player player : plugin.getGhostedPlayers())
 			{
+				WorldPoint playerPoint = player.getWorldLocation();
+
+				if (playerPoint != null)
+				{
+					// If the ghost is standing on YOUR tile, skip drawing their prayer
+					// so your native client prayer takes priority.
+					if (localPoint != null && playerPoint.equals(localPoint))
+					{
+						continue;
+					}
+
+					// If we already rendered a ghost's prayer on this exact tile, skip drawing another one.
+					if (renderedPrayerTiles.contains(playerPoint))
+					{
+						continue;
+					}
+
+					renderedPrayerTiles.add(playerPoint);
+				}
+
 				if (othersCustomPrayers)
 				{
 					drawTransparentPrayer(graphics, player, config.playerOpacity());
-
 				}
 
 				drawOverheadText(graphics, player);
@@ -165,7 +196,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 			modelOutlineRenderer.drawOutline(player, config.glowWidth(), color, config.glowFeather());
 		}
 		modelOutlineRenderer.drawOutline(player, config.outlineWidth(), color, config.outlineFeather());
-
 	}
 
 	private void renderFloorTile(Graphics2D graphics, Player player, Color color)
@@ -211,7 +241,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 			{
 				graphics.setColor(cachedFillColor);
 				graphics.fill(poly);
-
 			}
 		}
 	}

@@ -99,6 +99,28 @@ public class VisibilityEnhancer extends Plugin
 	public void onClientTick(ClientTick event)
 	{
 		cachedLocalPlayer = client.getLocalPlayer();
+
+		// Clear impacts off ghosted players if hiding other projectiles
+		if (config.hideOthersProjectiles())
+		{
+			for (Player p : ghostedPlayers)
+			{
+				// Clear the legacy graphic system
+				if (p.getGraphic() != -1)
+				{
+					p.setGraphic(-1);
+				}
+
+				// Clear the modern SpotAnim system
+				if (p.getSpotAnims() != null)
+				{
+					for (ActorSpotAnim spotAnim : p.getSpotAnims())
+					{
+						p.removeSpotAnim(spotAnim.getId());
+					}
+				}
+			}
+		}
 	}
 
 	@Subscribe
@@ -348,24 +370,67 @@ public class VisibilityEnhancer extends Plugin
 		int othersAlpha = clampAlpha(config.playerOpacity());
 		int myProjAlpha = clampAlpha(config.myProjectileOpacity());
 
+		// Create lists to sort shared models by their highest priority
+		Set<Model> forceOpaque = new HashSet<>();
+		Set<Model> forceMyAlpha = new HashSet<>();
+		Set<Model> forceOthersAlpha = new HashSet<>();
+
+		// Pass 1: Categorize all projectile models on screen
 		for (Projectile proj : client.getProjectiles())
 		{
+			Model m = proj.getModel();
+			if (m == null) continue;
+
 			Actor target = proj.getInteracting();
 
-			if (target != null && target != local)
+			// Highest Priority: If it targets you or the floor, it MUST be fully visible
+			if (target == local || target == null)
 			{
-				int alpha = myProjectiles.contains(proj) ? myProjAlpha : othersAlpha;
-				Model m = proj.getModel();
-
-				if (m != null)
+				forceOpaque.add(m);
+			}
+			// Second Priority: Projectiles from your own weapon
+			else if (myProjectiles.contains(proj))
+			{
+				if (!forceOpaque.contains(m))
 				{
-					byte[] trans = m.getFaceTransparencies();
-
-					if (trans != null && trans.length > 0 && (trans[0] & 0xFF) != alpha)
-					{
-						Arrays.fill(trans, (byte) alpha);
-					}
+					forceMyAlpha.add(m);
 				}
+			}
+			// Lowest Priority: Ghosted teammates' projectiles
+			else
+			{
+				if (!forceOpaque.contains(m) && !forceMyAlpha.contains(m))
+				{
+					forceOthersAlpha.add(m);
+				}
+			}
+		}
+
+		// Pass 2: Apply the opacities based on our sorted lists
+		for (Model m : forceOpaque)
+		{
+			byte[] trans = m.getFaceTransparencies();
+			if (trans != null && trans.length > 0 && (trans[0] & 0xFF) != 0)
+			{
+				Arrays.fill(trans, (byte) 0);
+			}
+		}
+
+		for (Model m : forceMyAlpha)
+		{
+			byte[] trans = m.getFaceTransparencies();
+			if (trans != null && trans.length > 0 && (trans[0] & 0xFF) != myProjAlpha)
+			{
+				Arrays.fill(trans, (byte) myProjAlpha);
+			}
+		}
+
+		for (Model m : forceOthersAlpha)
+		{
+			byte[] trans = m.getFaceTransparencies();
+			if (trans != null && trans.length > 0 && (trans[0] & 0xFF) != othersAlpha)
+			{
+				Arrays.fill(trans, (byte) othersAlpha);
 			}
 		}
 	}
@@ -430,6 +495,15 @@ public class VisibilityEnhancer extends Plugin
 
 	private void applyClothingFilter(Player player)
 	{
+		// --- NEW: Check for a color tint BEFORE altering their clothes ---
+		Model currentModel = player.getModel();
+		if (currentModel != null && currentModel.getOverrideAmount() != 0)
+		{
+			// If they have a tint, restore their clothes and stop the filter from applying
+			restoreClothing(player);
+			return;
+		}
+
 		PlayerComposition comp = player.getPlayerComposition();
 		if (comp == null)
 		{
@@ -471,6 +545,12 @@ public class VisibilityEnhancer extends Plugin
 			{
 				int targetOpacity = getEffectiveOpacity(player);
 
+				// Force 100% opacity if they have a full-body tint (Akkha, Monkey Room)
+				if (newModel.getOverrideAmount() != 0)
+				{
+					targetOpacity = 100;
+				}
+
 				if (targetOpacity < 100)
 				{
 					byte[] trans = newModel.getFaceTransparencies();
@@ -483,6 +563,15 @@ public class VisibilityEnhancer extends Plugin
 						{
 							Arrays.fill(trans, (byte) alpha);
 						}
+					}
+				}
+				else
+				{
+					// If forced to 100, explicitly clear any leftover transparency
+					byte[] trans = newModel.getFaceTransparencies();
+					if (trans != null && trans.length > 0 && (trans[0] & 0xFF) != 0)
+					{
+						Arrays.fill(trans, (byte) 0);
 					}
 				}
 			}
@@ -513,6 +602,13 @@ public class VisibilityEnhancer extends Plugin
 		Model model = p.getModel();
 		if (model == null)
 		{
+			return;
+		}
+
+		// If the player has a full-body tint (Akkha, Monkey Room), force 100% opacity
+		if (model.getOverrideAmount() != 0)
+		{
+			restoreOpacity(p);
 			return;
 		}
 
