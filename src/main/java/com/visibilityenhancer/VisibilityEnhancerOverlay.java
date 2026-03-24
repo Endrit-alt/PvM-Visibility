@@ -15,9 +15,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import javax.inject.Inject;
+import net.runelite.api.Actor;
 import net.runelite.api.Client;
 import net.runelite.api.HeadIcon;
 import net.runelite.api.Model;
+import net.runelite.api.NPC;
 import net.runelite.api.Player;
 import net.runelite.api.Point;
 import net.runelite.api.SpriteID;
@@ -73,31 +75,61 @@ public class VisibilityEnhancerOverlay extends Overlay
 	@Override
 	public Dimension render(Graphics2D graphics)
 	{
+		if (!plugin.isPluginToggledOn())
+		{
+			return null;
+		}
+
 		Player local = client.getLocalPlayer();
 		WorldPoint localPoint = local != null ? local.getWorldLocation() : null;
 		LocalPoint localLocalPoint = local != null ? local.getLocalLocation() : null;
 
-		if (local != null && config.selfOutline())
+		// --- Thralls Outlines ---
+		HighlightStyle thrallStyle = config.highlightThralls();
+		if (thrallStyle != HighlightStyle.NONE)
+		{
+			Color thrallsColor = config.thrallsOutlineColor();
+
+			for (NPC npc : client.getNpcs())
+			{
+				if (npc != null && VisibilityEnhancer.THRALL_IDS.contains(npc.getId()))
+				{
+					if (thrallStyle == HighlightStyle.TILE)
+					{
+						renderFloorTile(graphics, npc, thrallsColor);
+					}
+					else if (thrallStyle == HighlightStyle.OUTLINE)
+					{
+						renderOutlineLayers(npc, thrallsColor);
+					}
+				}
+			}
+		}
+
+		// --- Self Outlines ---
+		HighlightStyle selfStyle = config.highlightSelf();
+		if (local != null && selfStyle != HighlightStyle.NONE)
 		{
 			Model localModel = local.getModel();
 			if (localModel == null || localModel.getOverrideAmount() == 0)
 			{
-				if (config.selfUseFloorTileOutline())
+				if (selfStyle == HighlightStyle.TILE)
 				{
 					renderFloorTile(graphics, local, config.selfOutlineColor());
 				}
-				else
+				else if (selfStyle == HighlightStyle.OUTLINE)
 				{
 					renderOutlineLayers(local, config.selfOutlineColor());
 				}
 			}
 		}
 
-		if (config.othersOutline())
+		// --- Others Outlines ---
+		HighlightStyle othersStyle = config.highlightOthers();
+		if (othersStyle != HighlightStyle.NONE)
 		{
 			renderedTiles.clear();
 			boolean hideStacked = config.hideStackedOutlines();
-			boolean useFloorTile = config.othersUseFloorTileOutline();
 			Color othersColor = config.othersOutlineColor();
 
 			sortedGhosts.clear();
@@ -133,11 +165,11 @@ public class VisibilityEnhancerOverlay extends Overlay
 					renderedTiles.add(playerPoint);
 				}
 
-				if (useFloorTile)
+				if (othersStyle == HighlightStyle.TILE)
 				{
 					renderFloorTile(graphics, player, othersColor);
 				}
-				else
+				else if (othersStyle == HighlightStyle.OUTLINE)
 				{
 					renderOutlineLayers(player, othersColor);
 				}
@@ -149,7 +181,7 @@ public class VisibilityEnhancerOverlay extends Overlay
 		if (othersCustomPrayers)
 		{
 			Set<WorldPoint> renderedPrayerTiles = new HashSet<>();
-			List<Rectangle> renderedTextBounds = new ArrayList<>(); // Tracks drawn text to prevent overlap
+			List<Rectangle> renderedTextBounds = new ArrayList<>();
 
 			// --- Track native text from non-ghosted players (like yourself) ---
 			for (Player p : client.getPlayers())
@@ -172,7 +204,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 							int drawX = textPoint.getX() - 1;
 							int drawY = textPoint.getY() + 6;
 
-							// Add a bounding box for the native text so our custom text knows to avoid it!
 							renderedTextBounds.add(new Rectangle(drawX, drawY - textHeight, textWidth, textHeight));
 						}
 					}
@@ -182,7 +213,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 
 			for (Player player : plugin.getGhostedPlayers())
 			{
-				// 1. Always draw overhead text for EVERYONE, regardless of where they stand!
 				drawOverheadText(graphics, player, renderedTextBounds);
 
 				WorldPoint playerPoint = player.getWorldLocation();
@@ -202,10 +232,8 @@ public class VisibilityEnhancerOverlay extends Overlay
 					renderedPrayerTiles.add(playerPoint);
 				}
 
-				// 2. Draw Prayer
 				drawTransparentPrayer(graphics, player, config.prayersOpacity());
 
-				// 3. Draw Simplified HP Bar
 				int ratio = player.getHealthRatio();
 				int scale = player.getHealthScale();
 				if (ratio > -1 && scale > 0)
@@ -213,7 +241,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 					drawTransparentHpBar(graphics, player, ratio, scale, config.hpBarOpacity());
 				}
 
-				// 4. Draw Simplified Hitsplats
 				List<VisibilityEnhancer.CustomHitsplat> hitsplats = plugin.getCustomHitsplats().get(player);
 				if (hitsplats != null && !hitsplats.isEmpty())
 				{
@@ -234,9 +261,18 @@ public class VisibilityEnhancerOverlay extends Overlay
 		modelOutlineRenderer.drawOutline(player, config.outlineWidth(), color, config.outlineFeather());
 	}
 
-	private void renderFloorTile(Graphics2D graphics, Player player, Color color)
+	private void renderOutlineLayers(NPC npc, Color color)
 	{
-		Polygon poly = Perspective.getCanvasTilePoly(client, player.getLocalLocation());
+		if (config.enableGlow())
+		{
+			modelOutlineRenderer.drawOutline(npc, config.glowWidth(), color, config.glowFeather());
+		}
+		modelOutlineRenderer.drawOutline(npc, config.outlineWidth(), color, config.outlineFeather());
+	}
+
+	private void renderFloorTile(Graphics2D graphics, Actor actor, Color color)
+	{
+		Polygon poly = Perspective.getCanvasTilePoly(client, actor.getLocalLocation());
 		if (poly != null)
 		{
 			if (cachedColor == null || !cachedColor.equals(color))
@@ -317,27 +353,19 @@ public class VisibilityEnhancerOverlay extends Overlay
 		int x = point.getX() - (width / 2);
 		int y = point.getY() - 2;
 
-		// Draw red background
 		graphics.setColor(new Color(255, 0, 0, alpha));
 		graphics.fillRect(x, y, width, height);
 
-		// Draw green remaining health
 		graphics.setColor(new Color(0, 255, 0, alpha));
 		graphics.fillRect(x, y, fill, height);
-
-		// Draw black outline
-		//graphics.setColor(new Color(0, 0, 0, alpha));
-		//graphics.drawRect(x, y, width, height);
 	}
 
 	private void drawTransparentHitsplats(Graphics2D graphics, Player player, List<VisibilityEnhancer.CustomHitsplat> hitsplats, int opacityPercent)
 	{
 		int alpha = (int) ((opacityPercent / 100f) * 255);
 
-		// If text alpha is 0, don't draw anything at all
 		if (alpha <= 0) return;
 
-		// If the checkbox is true, force bg and outline alpha to 0 (invisible). Otherwise, use standard scaling.
 		int bgAlpha = config.hideHitsplatBackground() ? 0 : (int) (alpha * 0.8f);
 		int boxOutlineAlpha = config.hideHitsplatBackground() ? 0 : alpha;
 
@@ -359,15 +387,13 @@ public class VisibilityEnhancerOverlay extends Overlay
 
 		int size = hitsplats.size();
 
-		// --- NEW LOGIC: Calculate dynamic ceiling based on HP Bar ---
 		int shiftDown = 0;
 		Point hpPoint = player.getCanvasTextLocation(graphics, "", player.getLogicalHeight() + 15);
 		if (hpPoint != null)
 		{
-			int hpBarBottom = (hpPoint.getY() - 2) + 5; // y-2 is HP bar top, 5 is height
-			int ceilingY = hpBarBottom + 2; // Stay at least 2 pixels below bottom of HP bar
+			int hpBarBottom = (hpPoint.getY() - 2) + 5;
+			int ceilingY = hpBarBottom + 2;
 
-			// Predict the Y offset of the highest hitsplat (always index 0)
 			int highestOffsetY = 0;
 			if (size == 2) highestOffsetY = -(ySpacing / 2);
 			else if (size == 4) highestOffsetY = -ySpacing;
@@ -376,15 +402,12 @@ public class VisibilityEnhancerOverlay extends Overlay
 				highestOffsetY = -((totalRows - 1) * ySpacing / 2);
 			}
 
-			// Where the top edge of our highest hitsplat WANTS to be
 			int highestBoxY = basePoint.getY() + highestOffsetY - (boxHeight / 2) - 10;
 
-			// If it tries to go above the ceiling, calculate how much to push everything down
 			if (highestBoxY < ceilingY) {
 				shiftDown = ceilingY - highestBoxY;
 			}
 		}
-		// -----------------------------------------------------------
 
 		int maxTextWidth = 0;
 		for (VisibilityEnhancer.CustomHitsplat hit : hitsplats)
@@ -444,11 +467,8 @@ public class VisibilityEnhancerOverlay extends Overlay
 			}
 
 			int boxX = basePoint.getX() + offsetX - (boxWidth / 2);
-
-			// Apply shiftDown here to prevent overlapping the health bar
 			int boxY = basePoint.getY() + offsetY - (boxHeight / 2) - 10 + shiftDown;
 
-			// Draw background only if alpha > 0
 			if (bgAlpha > 0)
 			{
 				Color backColor = hit.getAmount() == 0 ?
@@ -457,18 +477,9 @@ public class VisibilityEnhancerOverlay extends Overlay
 				graphics.fillRoundRect(boxX, boxY, boxWidth, boxHeight, 2, 2);
 			}
 
-			// Draw box outline only if alpha > 0
-			//if (boxOutlineAlpha > 0)
-			//{
-			// Color outlineColor = new Color(0, 0, 0, boxOutlineAlpha);
-			// graphics.setColor(outlineColor);
-			// graphics.drawRoundRect(boxX, boxY, boxWidth, boxHeight, 2, 2);
-			//}
-
 			int textDrawX = boxX + paddingX;
 			int textDrawY = boxY + boxTextHeight + paddingY + 1;
 
-			// Draw text and its black drop shadow (shadow always uses the text's alpha)
 			if (alpha > 0)
 			{
 				Color textShadowColor = new Color(0, 0, 0, alpha);
@@ -495,7 +506,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 		graphics.setFont(FontManager.getRunescapeBoldFont());
 		FontMetrics fontMetrics = graphics.getFontMetrics();
 
-		// Strip hidden color tags before measuring
 		String cleanText = Text.removeTags(text);
 		int textWidth = fontMetrics.stringWidth(cleanText);
 		int textHeight = fontMetrics.getHeight();
@@ -525,7 +535,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 
 		Point adjustedPoint = new Point(drawX, drawY);
 
-		// Draw the original text so color tags show properly
 		OverlayUtil.renderTextLocation(graphics, adjustedPoint, text, Color.YELLOW);
 	}
 

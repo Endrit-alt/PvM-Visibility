@@ -2,11 +2,14 @@ package com.visibilityenhancer;
 
 import com.google.inject.Provides;
 import com.google.common.collect.ImmutableSet;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import javax.inject.Inject;
 import lombok.Getter;
 import lombok.AllArgsConstructor;
 import net.runelite.api.*;
+import net.runelite.api.gameval.NpcID;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.events.*;
 import net.runelite.api.kit.KitType;
@@ -17,11 +20,13 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
+import net.runelite.client.input.KeyManager;
+import net.runelite.client.util.HotkeyListener;
 
 @PluginDescriptor(
         name = "Raids Visibility Enhancer",
         description = "Teammate opacity, ground-view filters, and outlines for raids.",
-        tags = {"raid", "opacity", "outline", "equipment"}
+        tags = {"raid", "raids", "raids visibility enhancer", "opacity", "outline", "equipment"}
 )
 public class VisibilityEnhancer extends Plugin
 {
@@ -43,6 +48,17 @@ public class VisibilityEnhancer extends Plugin
    @Inject
    private Hooks hooks;
 
+   @Inject
+   private KeyManager keyManager;
+
+   @Getter
+   private boolean pluginToggledOn = true;
+
+   @Getter
+   private boolean hotkeyHeld = false;
+
+   private Instant lastPress;
+
    @Getter
    private final Set<Player> ghostedPlayers = new HashSet<>();
 
@@ -57,23 +73,65 @@ public class VisibilityEnhancer extends Plugin
    private final Set<Player> currentInRange = new HashSet<>();
    private final Set<Player> noLongerGhosted = new HashSet<>();
 
+   private final HotkeyListener hotkeyListener = new HotkeyListener(() -> config.toggleHotkey())
+   {
+      @Override
+      public void hotkeyPressed()
+      {
+         if (!pluginToggledOn)
+         {
+            pluginToggledOn = true;
+            hotkeyHeld = true;
+            lastPress = null;
+         }
+         else if (lastPress != null && !hotkeyHeld && config.doubleTapDelay() > 0 && Duration.between(lastPress, Instant.now()).compareTo(Duration.ofMillis(config.doubleTapDelay())) < 0)
+         {
+            pluginToggledOn = false;
+            lastPress = null;
+
+            clearAllGhosting();
+
+            Player local = client.getLocalPlayer();
+            if (local != null)
+            {
+               restorePlayer(local);
+            }
+         }
+         else
+         {
+            hotkeyHeld = true;
+            lastPress = Instant.now();
+         }
+      }
+
+      @Override
+      public void hotkeyReleased()
+      {
+         hotkeyHeld = false;
+      }
+   };
+
    // --- Exempt Animations for Opacity Override ---
    private static final Set<Integer> EXEMPT_ANIMATIONS = ImmutableSet.<Integer>builder()
-           .add(AnimationID.CONSUMING) // Protects against CoX Overload / potion damage tints
-           // Melee Specs
-           .add(1378) // DWH Spec
-           .add(7642).add(7643) // BGS Spec
-           .add(7514) // Dragon Claws Spec
-           .add(1062) // Dragon Dagger Spec
-           .add(1203) // Crystal/Dragon Halberd Spec
-           .add(7644).add(7640).add(7638) // AGS, SGS, ZGS Specs
-           .add(10172) // Voidwaker Spec
-           // Ranged Specs
-           .add(5062) // Toxic Blowpipe Spec
-           .add(9168) // Zaryte Crossbow Spec
-           // Magic/Other Specs
-           .add(8104) // Dawnbringer Spec (ToB)
+           .add(AnimationID.CONSUMING)
+           .add(1378)
+           .add(7642).add(7643)
+           .add(7514)
+           .add(1062)
+           .add(1203)
+           .add(7644).add(7640).add(7638)
+           .add(10172)
+           .add(5062)
+           .add(9168)
+           .add(8104)
            .build();
+
+   // --- Thrall IDs ---
+   public static final Set<Integer> THRALL_IDS = ImmutableSet.of(
+           NpcID.ARCEUUS_THRALL_GHOST_LESSER, NpcID.ARCEUUS_THRALL_SKELETON_LESSER, NpcID.ARCEUUS_THRALL_ZOMBIE_LESSER,
+           NpcID.ARCEUUS_THRALL_GHOST_SUPERIOR, NpcID.ARCEUUS_THRALL_SKELETON_SUPERIOR, NpcID.ARCEUUS_THRALL_ZOMBIE_SUPERIOR,
+           NpcID.ARCEUUS_THRALL_GHOST_GREATER, NpcID.ARCEUUS_THRALL_SKELETON_GREATER, NpcID.ARCEUUS_THRALL_ZOMBIE_GREATER
+   );
 
    // --- Simplified Hitsplat Tracker ---
    @Getter
@@ -93,6 +151,9 @@ public class VisibilityEnhancer extends Plugin
    {
       overlayManager.add(overlay);
       hooks.registerRenderableDrawListener(drawListener);
+      keyManager.registerKeyListener(hotkeyListener);
+      pluginToggledOn = true;
+      hotkeyHeld = false;
    }
 
    @Override
@@ -100,6 +161,7 @@ public class VisibilityEnhancer extends Plugin
    {
       overlayManager.remove(overlay);
       hooks.unregisterRenderableDrawListener(drawListener);
+      keyManager.unregisterKeyListener(hotkeyListener);
 
       clientThread.invokeLater(() ->
       {
@@ -128,6 +190,8 @@ public class VisibilityEnhancer extends Plugin
    @Subscribe
    public void onHitsplatApplied(HitsplatApplied event)
    {
+      if (!pluginToggledOn) return;
+
       if (event.getActor() instanceof Player)
       {
          Player p = (Player) event.getActor();
@@ -143,6 +207,8 @@ public class VisibilityEnhancer extends Plugin
    @Subscribe
    public void onClientTick(ClientTick event)
    {
+      if (!pluginToggledOn) return;
+
       cachedLocalPlayer = client.getLocalPlayer();
 
       if (config.hideOthersProjectiles())
@@ -168,6 +234,8 @@ public class VisibilityEnhancer extends Plugin
    @Subscribe
    public void onProjectileMoved(ProjectileMoved event)
    {
+      if (!pluginToggledOn) return;
+
       Projectile proj = event.getProjectile();
 
       if (myProjectiles.contains(proj))
@@ -196,7 +264,6 @@ public class VisibilityEnhancer extends Plugin
       int dy = proj.getY1() - lp.getY();
       int distSq = (dx * dx) + (dy * dy);
 
-      // Check if the projectile originated near us AND we are actively doing an animation
       if (distSq < (192 * 192) && local.getAnimation() != -1)
       {
          myProjectiles.add(proj);
@@ -247,6 +314,8 @@ public class VisibilityEnhancer extends Plugin
    @Subscribe
    public void onGameTick(GameTick event)
    {
+      if (!pluginToggledOn) return;
+
       Player local = client.getLocalPlayer();
       if (local == null)
       {
@@ -394,6 +463,8 @@ public class VisibilityEnhancer extends Plugin
    @Subscribe
    public void onBeforeRender(BeforeRender event)
    {
+      if (!pluginToggledOn) return;
+
       Player local = client.getLocalPlayer();
       if (local == null)
       {
@@ -445,8 +516,6 @@ public class VisibilityEnhancer extends Plugin
          }
       }
 
-      // --- REVERSED LOOP ORDER ---
-      // Ghost opacity processes first, then your projectiles, then Solid Boss projectiles last!
       for (Model m : forceOthersAlpha)
       {
          byte[] trans = m.getFaceTransparencies();
@@ -477,6 +546,8 @@ public class VisibilityEnhancer extends Plugin
 
    private boolean shouldDraw(Renderable renderable, boolean drawingUI)
    {
+      if (!pluginToggledOn) return true;
+
       if (renderable instanceof Projectile && config.hideOthersProjectiles())
       {
          Projectile proj = (Projectile) renderable;
@@ -495,6 +566,16 @@ public class VisibilityEnhancer extends Plugin
             {
                return false;
             }
+         }
+      }
+
+      // Hide Thralls check
+      if (renderable instanceof NPC && config.hideThralls())
+      {
+         NPC npc = (NPC) renderable;
+         if (THRALL_IDS.contains(npc.getId()))
+         {
+            return false;
          }
       }
 

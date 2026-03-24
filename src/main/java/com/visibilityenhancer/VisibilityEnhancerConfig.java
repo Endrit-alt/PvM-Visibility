@@ -15,6 +15,7 @@ public interface VisibilityEnhancerConfig extends Config
 	String opacitySection = "opacitySection";
 
 	@Range(min = 0, max = 100)
+	@Units(Units.PERCENT)
 	@ConfigItem(
 			keyName = "selfOpacity",
 			name = "My Opacity",
@@ -25,9 +26,10 @@ public interface VisibilityEnhancerConfig extends Config
 	default int selfOpacity() { return 100; }
 
 	@Range(min = 0, max = 100)
+	@Units(Units.PERCENT)
 	@ConfigItem(
 			keyName = "playerOpacity",
-			name = "Ghost Opacity",
+			name = "Others Opacity",
 			position = 2,
 			section = opacitySection,
 			description = "Transparency of nearby players"
@@ -35,6 +37,7 @@ public interface VisibilityEnhancerConfig extends Config
 	default int playerOpacity() { return 100; }
 
 	@Range(min = 0, max = 100)
+	@Units(Units.PERCENT)
 	@ConfigItem(
 			keyName = "myProjectileOpacity",
 			name = "My Projectile Opacity",
@@ -47,10 +50,10 @@ public interface VisibilityEnhancerConfig extends Config
 	@Range(min = 1, max = 50)
 	@ConfigItem(
 			keyName = "proximityRange",
-			name = "Ghosting Distance",
+			name = "Others Distance",
 			position = 4,
 			section = opacitySection,
-			description = "Radius (in tiles) around you where players will be ghosted"
+			description = "Radius (in tiles) around you where other players will be affected"
 	)
 	default int proximityRange() { return 10; }
 
@@ -59,13 +62,13 @@ public interface VisibilityEnhancerConfig extends Config
 			name = "Ignore Friends",
 			position = 5,
 			section = opacitySection,
-			description = "Prevents friends from being ghosted/transparent"
+			description = "Prevents friends from being affected/transparent"
 	)
 	default boolean ignoreFriends() { return false; }
 
 	@ConfigItem(
 			keyName = "limitAffectedPlayers",
-			name = "Limit Max Ghosts",
+			name = "Limit Max Others",
 			position = 6,
 			section = opacitySection,
 			description = "Limits the number of players affected for performance"
@@ -75,7 +78,7 @@ public interface VisibilityEnhancerConfig extends Config
 	@Range(min = 1, max = 100)
 	@ConfigItem(
 			keyName = "maxAffectedPlayers",
-			name = "Max Ghosts",
+			name = "Max Others",
 			position = 7,
 			section = opacitySection,
 			description = "The maximum number of players to apply effects to"
@@ -92,9 +95,18 @@ public interface VisibilityEnhancerConfig extends Config
 	String extrasSection = "extrasSection";
 
 	@ConfigItem(
+			keyName = "hideStackedOutlines",
+			name = "Hide Stacked Highlights",
+			position = 1,
+			section = extrasSection,
+			description = "Only shows one highlight per tile if players are standing on each other"
+	)
+	default boolean hideStackedOutlines() { return true; }
+
+	@ConfigItem(
 			keyName = "selfClearGround",
 			name = "Clear Ground (Self)",
-			position = 1,
+			position = 2,
 			section = extrasSection,
 			description = "Hides your Cape, Shield, Legs, and Boots to see ground markers better."
 	)
@@ -103,16 +115,16 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(
 			keyName = "othersClearGround",
 			name = "Clear Ground (Others)",
-			position = 2,
+			position = 3,
 			section = extrasSection,
-			description = "Hides Cape, Shield, Legs, and Boots on nearby ghosted players."
+			description = "Hides Cape, Shield, Legs, and Boots on nearby affected players."
 	)
 	default boolean othersClearGround() { return false; }
 
 	@ConfigItem(
 			keyName = "hideOthersProjectiles",
 			name = "Hide Others' Projectiles",
-			position = 3,
+			position = 4,
 			section = extrasSection,
 			description = "Completely hides projectiles that didn't come from you"
 	)
@@ -120,131 +132,135 @@ public interface VisibilityEnhancerConfig extends Config
 
 	@ConfigItem(
 			keyName = "customTransparentPrayers",
-			name = "Transparent Ghost Extras",
-			position = 4,
+			name = "Transparent Others Extras",
+			position = 5,
 			section = extrasSection,
-			description = "Hides native overheads, hitsplats, and HP bars for ghosts, replacing them with transparent versions"
+			description = "Hides native overheads, hitsplats, and HP bars for others, replacing them with transparent versions"
 	)
 	default boolean othersTransparentPrayers() { return false; }
 
 	@Range(min = 0, max = 100)
+	@Units(Units.PERCENT)
 	@ConfigItem(
 			keyName = "prayersOpacity",
 			name = "  ↳ Prayers Opacity",
-			position = 5,
+			position = 6,
 			section = extrasSection,
-			description = "(Requires 'Transparent Ghost Extras' enabled)<br>Transparency of replaced overhead prayers"
+			description = "(Requires 'Transparent Others Extras' enabled)<br>Transparency of replaced overhead prayers"
 	)
 	default int prayersOpacity() { return 100; }
 
 	@Range(min = 0, max = 100)
+	@Units(Units.PERCENT)
 	@ConfigItem(
 			keyName = "hpBarOpacity",
 			name = "  ↳ HP Bar Opacity",
-			position = 6,
+			position = 7,
 			section = extrasSection,
-			description = "(Requires 'Transparent Ghost Extras' enabled)<br>Transparency of replaced HP bars"
+			description = "(Requires 'Transparent Others Extras' enabled)<br>Transparency of replaced HP bars"
 	)
 	default int hpBarOpacity() { return 100; }
 
 	@Range(min = 0, max = 100)
+	@Units(Units.PERCENT)
 	@ConfigItem(
 			keyName = "hitsplatsOpacity",
 			name = "  ↳ Hitsplats Opacity",
-			position = 7,
+			position = 8,
 			section = extrasSection,
-			description = "(Requires 'Transparent Ghost Extras' enabled)<br>Transparency of replaced hitsplats"
+			description = "(Requires 'Transparent Others Extras' enabled)<br>Transparency of replaced hitsplats"
 	)
 	default int hitsplatsOpacity() { return 100; }
 
 	@ConfigItem(
 			keyName = "hideHitsplatBackground",
 			name = "  ↳ Hide Hitsplat Bg",
-			position = 8,
+			position = 9,
 			section = extrasSection,
-			description = "(Requires 'Transparent Ghost Extras' enabled)<br>Removes the hitsplat background box completely, showing only the numbers"
+			description = "(Requires 'Transparent Others Extras' enabled)<br>Removes the hitsplat background box completely, showing only the numbers"
 	)
 	default boolean hideHitsplatBackground() { return false; }
+
+	@ConfigItem(
+			keyName = "hideThralls",
+			name = "Hide Thralls",
+			position = 10,
+			section = extrasSection,
+			description = "Completely hides all Arceeus thralls"
+	)
+	default boolean hideThralls() { return false; }
 
 
 	// --- OUTLINE SECTION ---
 	@ConfigSection(
-			name = "Outlines",
-			description = "Settings for player outlines and colors.",
+			name = "Highlights",
+			description = "Settings for player outlines and floor tiles.",
 			position = 20
 	)
 	String outlineSection = "outlineSection";
 
 	@ConfigItem(
-			keyName = "selfOutline",
-			name = "Outline Myself",
+			keyName = "highlightSelf",
+			name = "Highlight Myself",
 			position = 1,
 			section = outlineSection,
-			description = "Enable an outline for your character"
+			description = "Choose how to highlight your own character"
 	)
-	default boolean selfOutline() { return false; }
+	default HighlightStyle highlightSelf() { return HighlightStyle.NONE; }
 
 	@Alpha
 	@ConfigItem(
 			keyName = "selfOutlineColor",
-			name = "My Outline Color",
+			name = "My Highlight Color",
 			position = 2,
 			section = outlineSection,
-			description = "The color of your own outline"
+			description = "The color of your own highlight"
 	)
 	default Color selfOutlineColor() { return Color.WHITE; }
 
 	@ConfigItem(
-			keyName = "othersOutline",
-			name = "Outline Ghosts",
+			keyName = "highlightOthers",
+			name = "Highlight Others",
 			position = 3,
 			section = outlineSection,
-			description = "Enable outlines for nearby ghosted players"
+			description = "Choose how to highlight nearby affected players"
 	)
-	default boolean othersOutline() { return false; }
+	default HighlightStyle highlightOthers() { return HighlightStyle.NONE; }
 
 	@Alpha
 	@ConfigItem(
 			keyName = "othersOutlineColor",
-			name = "Ghost Outline Color",
+			name = "Others Highlight Color",
 			position = 4,
 			section = outlineSection,
-			description = "The color of ghosted player outlines"
+			description = "The color of other players' highlights"
 	)
 	default Color othersOutlineColor() { return new Color(255, 255, 255, 150); }
 
 	@ConfigItem(
-			keyName = "hideStackedOutlines",
-			name = "Hide Stacked Outlines",
+			keyName = "highlightThralls",
+			name = "Highlight Thralls",
 			position = 5,
 			section = outlineSection,
-			description = "Only shows one outline per tile if players are standing on each other"
+			description = "Choose how to highlight Arceeus thralls"
 	)
-	default boolean hideStackedOutlines() { return true; }
+	default HighlightStyle highlightThralls() { return HighlightStyle.NONE; }
 
+	@Alpha
 	@ConfigItem(
-			keyName = "useFloorTileOutline",
-			name = "Ghosts Floor Tile",
+			keyName = "thrallsOutlineColor",
+			name = "Thralls Highlight Color",
 			position = 6,
 			section = outlineSection,
-			description = "Draws a square on the floor instead of outlining the 3D body for ghosted players"
+			description = "The color of thrall highlights"
 	)
-	default boolean othersUseFloorTileOutline() { return false; }
-
-	@ConfigItem(
-			keyName = "selfUseFloorTileOutline",
-			name = "Self Floor Tile",
-			position = 7,
-			section = outlineSection,
-			description = "Draws a square on the floor instead of outlining the 3D body for your own character"
-	)
-	default boolean selfUseFloorTileOutline() { return false; }
+	default Color thrallsOutlineColor() { return new Color(0, 255, 255, 150); }
 
 
 	// --- OUTLINE STYLE SECTION ---
 	@ConfigSection(
-			name = "Outline Style",
-			description = "Visual aesthetics of the outlines (Global settings).",
+			name = "Highlight Style",
+			description = "Visual aesthetics of the highlights (Global settings).",
 			position = 30
 	)
 	String styleSection = "styleSection";
@@ -303,7 +319,34 @@ public interface VisibilityEnhancerConfig extends Config
 			name = "Fill Floor Tile",
 			position = 6,
 			section = styleSection,
-			description = "Fills the inside of the floor tile if 'Use Floor Tile Outline' is enabled"
+			description = "Fills the inside of the floor tile if a 'Tile' highlight is selected"
 	)
 	default boolean fillFloorTile() { return false; }
+
+	// --- HOTKEY SECTION ---
+	@ConfigSection(
+			name = "Hotkeys",
+			description = "Hotkey settings for the plugin.",
+			position = 40
+	)
+	String hotkeySection = "hotkeySection";
+
+	@ConfigItem(
+			keyName = "toggleHotkey",
+			name = "Toggle Plugin",
+			position = 1,
+			section = hotkeySection,
+			description = "Press this key to enable or disable the plugin's effects."
+	)
+	default Keybind toggleHotkey() { return Keybind.NOT_SET; }
+
+	@ConfigItem(
+			keyName = "doubleTapDelay",
+			name = "Double-tap delay",
+			description = "Delay for the double-tap to toggle the plugin off. 0 to disable.",
+			position = 2,
+			section = hotkeySection
+	)
+	@Units(Units.MILLISECONDS)
+	default int doubleTapDelay() { return 250; }
 }
