@@ -1,8 +1,4 @@
-<p align="center">
-  <img src="screenshots/logo_raidsvisibilityenhancer.png" alt="Raids visibility Enhancer Logo" width="662">
-</p>
-
-Raids Visibility Enhancer is a RuneLite plugin built for raid teams that want better visibility. It is the first plugin that works with opacity to provide a better experience inside team raids and other group PvM content.
+10/10 Vision is a RuneLite plugin built for raid teams that want better visibility. It is the first plugin that works with opacity to provide a better experience inside team raids and other group PvM content.
 
 The plugin is aimed at group content such as Tombs of Amascut, Chambers of Xeric, Theatre of Blood and Nex, while remaining useful anywhere a person wants better visibility.
 
