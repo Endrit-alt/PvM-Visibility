@@ -32,6 +32,8 @@ import net.runelite.api.coords.WorldPoint;
 )
 public class VisibilityEnhancer extends Plugin
 {
+   private static final int OVERRIDE_OPAQUE_DELAY_CYCLES = 2;
+
    @Inject
    private Client client;
 
@@ -67,6 +69,7 @@ public class VisibilityEnhancer extends Plugin
    private final Map<Player, int[]> originalEquipmentMap = new HashMap<>();
    private final Set<Projectile> myProjectiles = new HashSet<>();
    private final Map<byte[], byte[]> originalTransparencies = new WeakHashMap<>();
+   private final Map<Player, Integer> overrideStartCycle = new HashMap<>();
 
    private final Hooks.RenderableDrawListener drawListener = this::shouldDraw;
 
@@ -89,7 +92,8 @@ public class VisibilityEnhancer extends Plugin
             hotkeyHeld = true;
             lastPress = null;
          }
-         else if (lastPress != null && !hotkeyHeld && config.doubleTapDelay() > 0 && Duration.between(lastPress, Instant.now()).compareTo(Duration.ofMillis(config.doubleTapDelay())) < 0)
+         else if (lastPress != null && !hotkeyHeld && config.doubleTapDelay() > 0
+                 && Duration.between(lastPress, Instant.now()).compareTo(Duration.ofMillis(config.doubleTapDelay())) < 0)
          {
             pluginToggledOn = false;
             lastPress = null;
@@ -113,7 +117,6 @@ public class VisibilityEnhancer extends Plugin
       }
    };
 
-   // --- Exempt Animations for Opacity Override ---
    private static final Set<Integer> EXEMPT_ANIMATIONS = ImmutableSet.<Integer>builder()
            .add(AnimationID.CONSUMING)
            .add(1378)
@@ -128,26 +131,19 @@ public class VisibilityEnhancer extends Plugin
            .add(8104)
            .build();
 
-   // --- Thrall IDs ---
    public static final Set<Integer> THRALL_IDS = ImmutableSet.of(
            NpcID.ARCEUUS_THRALL_GHOST_LESSER, NpcID.ARCEUUS_THRALL_SKELETON_LESSER, NpcID.ARCEUUS_THRALL_ZOMBIE_LESSER,
            NpcID.ARCEUUS_THRALL_GHOST_SUPERIOR, NpcID.ARCEUUS_THRALL_SKELETON_SUPERIOR, NpcID.ARCEUUS_THRALL_ZOMBIE_SUPERIOR,
            NpcID.ARCEUUS_THRALL_GHOST_GREATER, NpcID.ARCEUUS_THRALL_SKELETON_GREATER, NpcID.ARCEUUS_THRALL_ZOMBIE_GREATER
    );
 
-   // --- Boss Projectile Safety List (Forced to 100% Opacity) ---
    private static final Set<Integer> BOSS_PROJECTILES = ImmutableSet.<Integer>builder()
-           // ToA: Wardens (P1 Orbs, P2/P3 Mage/Range), Akkha (Mage/Range/Orbs), Zebak, Kephri
            .add(2206, 2228, 2242, 2243, 2224, 2225, 2241, 2137, 2138, 2266)
-           // ToB: Verzik (Mage/Range/P3), Sote (Ball/Small), Xarpus (Screech), Nylo (Small), Maiden (Blood)
            .add(1583, 1584, 1585, 1586, 1591, 1604, 1606, 1607, 1555, 1560, 1577, 1578)
-           // CoX: Olm (Mage/Range/Spheres), Vasa, Muttadile
            .add(1339, 1340, 1341, 1343, 1345, 1354, 1327, 1291)
-           // Other: Nex (Shadow/Ice), Nightmare (Spores), Royal Titans
            .add(2010, 2011, 1764)
            .build();
 
-   // --- Simplified Hitsplat Tracker ---
    @Getter
    @AllArgsConstructor
    public static class CustomHitsplat
@@ -158,7 +154,6 @@ public class VisibilityEnhancer extends Plugin
 
    @Getter
    private final Map<Player, List<CustomHitsplat>> customHitsplats = new HashMap<>();
-   // ----------------------------------------
 
    @Override
    protected void startUp()
@@ -186,42 +181,69 @@ public class VisibilityEnhancer extends Plugin
 
    public boolean isActive()
    {
-      if (!pluginToggledOn) return false;
+      if (!pluginToggledOn)
+      {
+         return false;
+      }
 
-      if (!config.enableAreaFiltering()) return true;
+      if (!config.enableAreaFiltering())
+      {
+         return true;
+      }
 
       Player local = client.getLocalPlayer();
-      if (local == null) return false;
+      if (local == null)
+      {
+         return false;
+      }
 
       LocalPoint lp = local.getLocalLocation();
-      if (lp == null) return false;
+      if (lp == null)
+      {
+         return false;
+      }
 
       int regionId = WorldPoint.fromLocalInstance(client, lp).getRegionID();
 
       switch (regionId)
       {
-         // ToB
-         case 12613: return config.tobMaiden();
-         case 13125: return config.tobBloat();
-         case 13122: return config.tobNylo();
-         case 13123: case 13379: return config.tobSote();
-         case 12612: return config.tobXarpus();
-         case 12611: return config.tobVerzik();
+         case 12613:
+            return config.tobMaiden();
+         case 13125:
+            return config.tobBloat();
+         case 13122:
+            return config.tobNylo();
+         case 13123:
+         case 13379:
+            return config.tobSote();
+         case 12612:
+            return config.tobXarpus();
+         case 12611:
+            return config.tobVerzik();
 
-         // ToA
-         case 15700: return config.toaZebak();
-         case 14164: return config.toaKephri();
-         case 14676: return config.toaAkkha();
-         case 15188: return config.toaBaba();
-         case 15184: case 15696: return config.toaWardens();
+         case 15700:
+            return config.toaZebak();
+         case 14164:
+            return config.toaKephri();
+         case 14676:
+            return config.toaAkkha();
+         case 15188:
+            return config.toaBaba();
+         case 15184:
+         case 15696:
+            return config.toaWardens();
 
-         // CoX
-         case 12889: return config.coxOlm();
+         case 12889:
+            return config.coxOlm();
 
-         // Other Bosses
-         case 11601: return config.otherNex();
-         case 15515: return config.otherNightmare();
-         case 11827: case 11828: case 12084: return config.otherRoyalTitans();
+         case 11601:
+            return config.otherNex();
+         case 15515:
+            return config.otherNightmare();
+         case 11827:
+         case 11828:
+         case 12084:
+            return config.otherRoyalTitans();
       }
 
       if (client.getVarbitValue(Varbits.IN_RAID) == 1)
@@ -235,7 +257,10 @@ public class VisibilityEnhancer extends Plugin
    @Subscribe
    public void onHitsplatApplied(HitsplatApplied event)
    {
-      if (!isActive()) return;
+      if (!isActive())
+      {
+         return;
+      }
 
       if (event.getActor() instanceof Player)
       {
@@ -258,7 +283,10 @@ public class VisibilityEnhancer extends Plugin
    @Subscribe
    public void onClientTick(ClientTick event)
    {
-      if (!isActive()) return;
+      if (!isActive())
+      {
+         return;
+      }
 
       cachedLocalPlayer = client.getLocalPlayer();
 
@@ -285,7 +313,10 @@ public class VisibilityEnhancer extends Plugin
    @Subscribe
    public void onProjectileMoved(ProjectileMoved event)
    {
-      if (!isActive()) return;
+      if (!isActive())
+      {
+         return;
+      }
 
       Projectile proj = event.getProjectile();
 
@@ -334,17 +365,24 @@ public class VisibilityEnhancer extends Plugin
       ghostedPlayers.remove(p);
       originalEquipmentMap.remove(p);
       customHitsplats.remove(p);
+      overrideStartCycle.remove(p);
    }
 
    @Subscribe
    public void onPlayerChanged(PlayerChanged event)
    {
-      if (!isActive()) return;
+      if (!isActive())
+      {
+         return;
+      }
 
       Player p = event.getPlayer();
       Player local = client.getLocalPlayer();
 
-      if (p == null || local == null) return;
+      if (p == null || local == null)
+      {
+         return;
+      }
 
       if (p == local)
       {
@@ -354,6 +392,8 @@ public class VisibilityEnhancer extends Plugin
          {
             applyClothingFilter(p);
          }
+
+         applyConfiguredOpacity(p);
          return;
       }
 
@@ -363,6 +403,8 @@ public class VisibilityEnhancer extends Plugin
          {
             applyClothingFilter(p);
          }
+
+         applyConfiguredOpacity(p);
       }
    }
 
@@ -382,7 +424,10 @@ public class VisibilityEnhancer extends Plugin
                {
                   restoreClothing(local);
                   PlayerComposition comp = local.getPlayerComposition();
-                  if (comp != null) comp.setHash();
+                  if (comp != null)
+                  {
+                     comp.setHash();
+                  }
                }
             });
          }
@@ -394,7 +439,10 @@ public class VisibilityEnhancer extends Plugin
    {
       checkStateTransition();
 
-      if (!isActive()) return;
+      if (!isActive())
+      {
+         return;
+      }
 
       Player local = client.getLocalPlayer();
       if (local == null)
@@ -480,7 +528,10 @@ public class VisibilityEnhancer extends Plugin
             LocalPoint lp1 = p1.getLocalLocation();
             LocalPoint lp2 = p2.getLocalLocation();
 
-            if (lp1 == null || lp2 == null) return 0;
+            if (lp1 == null || lp2 == null)
+            {
+               return 0;
+            }
 
             int dist1 = Math.max(Math.abs(localX - lp1.getSceneX()), Math.abs(localY - lp1.getSceneY()));
             int dist2 = Math.max(Math.abs(localX - lp2.getSceneX()), Math.abs(localY - lp2.getSceneY()));
@@ -500,11 +551,23 @@ public class VisibilityEnhancer extends Plugin
 
       for (Player p : currentInRange)
       {
-         if (opacity < 100) applyOpacity(p, opacity);
-         else restoreOpacity(p);
+         if (opacity < 100)
+         {
+            applyOpacity(p, opacity);
+         }
+         else
+         {
+            restoreOpacity(p);
+         }
 
-         if (hideOthersClothes) applyClothingFilter(p);
-         else if (originalEquipmentMap.containsKey(p)) restoreClothing(p);
+         if (hideOthersClothes)
+         {
+            applyClothingFilter(p);
+         }
+         else if (originalEquipmentMap.containsKey(p))
+         {
+            restoreClothing(p);
+         }
       }
 
       noLongerGhosted.addAll(ghostedPlayers);
@@ -522,17 +585,29 @@ public class VisibilityEnhancer extends Plugin
    @Subscribe
    public void onBeforeRender(BeforeRender event)
    {
-      if (!isActive()) return;
+      if (!isActive())
+      {
+         return;
+      }
 
       wasActive = true;
 
       Player local = client.getLocalPlayer();
-      if (local == null) return;
+      if (local == null)
+      {
+         return;
+      }
 
       int selfOpacity = config.selfClearGround() ? 100 : config.selfOpacity();
 
-      if (selfOpacity < 100) applyOpacity(local, selfOpacity);
-      else restoreOpacity(local);
+      if (selfOpacity < 100)
+      {
+         applyOpacity(local, selfOpacity);
+      }
+      else
+      {
+         restoreOpacity(local);
+      }
 
       int othersAlpha = clampAlpha(config.playerOpacity());
       int selfAlpha = clampAlpha(selfOpacity);
@@ -540,17 +615,23 @@ public class VisibilityEnhancer extends Plugin
       Map<byte[], Model> arrayToModel = new HashMap<>();
       Map<byte[], Integer> arrayState = new HashMap<>();
 
-      final int STATE_RESTORE = 0; // Priority 1: Bosses, Ground Attacks, Hitting You
-      final int STATE_MINE = 1;    // Priority 2: Your projectiles
-      final int STATE_OTHERS = 2;  // Priority 3: Other player projectiles
+      final int STATE_RESTORE = 0;
+      final int STATE_MINE = 1;
+      final int STATE_OTHERS = 2;
 
       for (Projectile proj : client.getProjectiles())
       {
          Model m = proj.getModel();
-         if (m == null) continue;
+         if (m == null)
+         {
+            continue;
+         }
 
          byte[] trans = m.getFaceTransparencies();
-         if (trans == null || trans.length == 0) continue;
+         if (trans == null || trans.length == 0)
+         {
+            continue;
+         }
 
          Actor target = proj.getInteracting();
          boolean isBossProjectile = BOSS_PROJECTILES.contains(proj.getId());
@@ -594,20 +675,35 @@ public class VisibilityEnhancer extends Plugin
          }
          else if (state == STATE_MINE)
          {
-            if (selfOpacity < 100) applyModelAlpha(m, selfAlpha);
-            else restoreModelAlpha(m);
+            if (selfOpacity < 100)
+            {
+               applyModelAlpha(m, selfAlpha);
+            }
+            else
+            {
+               restoreModelAlpha(m);
+            }
          }
          else if (state == STATE_OTHERS)
          {
-            if (config.playerOpacity() < 100) applyModelAlpha(m, othersAlpha);
-            else restoreModelAlpha(m);
+            if (config.playerOpacity() < 100)
+            {
+               applyModelAlpha(m, othersAlpha);
+            }
+            else
+            {
+               restoreModelAlpha(m);
+            }
          }
       }
    }
 
    private boolean shouldDraw(Renderable renderable, boolean drawingUI)
    {
-      if (!isActive()) return true;
+      if (!isActive())
+      {
+         return true;
+      }
 
       if (renderable instanceof Projectile && config.hideOthersProjectiles())
       {
@@ -649,8 +745,16 @@ public class VisibilityEnhancer extends Plugin
    private int getEffectiveOpacity(Player player)
    {
       Player local = client.getLocalPlayer();
-      if (player == null || local == null) return 100;
-      if (player == local) return config.selfClearGround() ? 100 : config.selfOpacity();
+      if (player == null || local == null)
+      {
+         return 100;
+      }
+
+      if (player == local)
+      {
+         return config.selfClearGround() ? 100 : config.selfOpacity();
+      }
+
       return config.othersClearGround() ? 100 : config.playerOpacity();
    }
 
@@ -666,17 +770,68 @@ public class VisibilityEnhancer extends Plugin
       wasActive = currentlyActive;
    }
 
+   private boolean isExemptAnimation(Player player)
+   {
+      return player != null && EXEMPT_ANIMATIONS.contains(player.getAnimation());
+   }
+
+   private boolean shouldForceOpaqueForOverride(Player player, Model model)
+   {
+      if (player == null || model == null)
+      {
+         return false;
+      }
+
+      if (model.getOverrideAmount() == 0 || isExemptAnimation(player))
+      {
+         overrideStartCycle.remove(player);
+         return false;
+      }
+
+      int currentCycle = client.getGameCycle();
+      Integer startCycle = overrideStartCycle.get(player);
+
+      if (startCycle == null)
+      {
+         overrideStartCycle.put(player, currentCycle);
+         return false;
+      }
+
+      return currentCycle - startCycle >= OVERRIDE_OPAQUE_DELAY_CYCLES;
+   }
+
+   private void applyConfiguredOpacity(Player player)
+   {
+      if (player == null)
+      {
+         return;
+      }
+
+      int opacity = getEffectiveOpacity(player);
+      if (opacity < 100)
+      {
+         applyOpacity(player, opacity);
+      }
+      else
+      {
+         restoreOpacity(player);
+      }
+   }
+
    private void applyClothingFilter(Player player)
    {
       Model currentModel = player.getModel();
-      if (currentModel != null && currentModel.getOverrideAmount() != 0)
+      if (currentModel != null && shouldForceOpaqueForOverride(player, currentModel))
       {
          restoreClothing(player);
          return;
       }
 
       PlayerComposition comp = player.getPlayerComposition();
-      if (comp == null) return;
+      if (comp == null)
+      {
+         return;
+      }
 
       int[] equipmentIds = comp.getEquipmentIds();
 
@@ -710,7 +865,10 @@ public class VisibilityEnhancer extends Plugin
          if (newModel != null)
          {
             int targetOpacity = getEffectiveOpacity(player);
-            if (newModel.getOverrideAmount() != 0) targetOpacity = 100;
+            if (shouldForceOpaqueForOverride(player, newModel))
+            {
+               targetOpacity = 100;
+            }
 
             if (targetOpacity < 100)
             {
@@ -727,7 +885,10 @@ public class VisibilityEnhancer extends Plugin
 
    private void restoreClothing(Player player)
    {
-      if (!originalEquipmentMap.containsKey(player)) return;
+      if (!originalEquipmentMap.containsKey(player))
+      {
+         return;
+      }
 
       PlayerComposition comp = player.getPlayerComposition();
       if (comp != null)
@@ -741,15 +902,13 @@ public class VisibilityEnhancer extends Plugin
       originalEquipmentMap.remove(player);
    }
 
-   private boolean isExemptAnimation(Player player)
-   {
-      return player != null && EXEMPT_ANIMATIONS.contains(player.getAnimation());
-   }
-
    private void applyModelAlpha(Model m, int alpha)
    {
       byte[] trans = m.getFaceTransparencies();
-      if (trans == null || trans.length == 0) return;
+      if (trans == null || trans.length == 0)
+      {
+         return;
+      }
 
       byte[] original = originalTransparencies.get(trans);
       if (original == null)
@@ -772,10 +931,16 @@ public class VisibilityEnhancer extends Plugin
 
    private void restoreModelAlpha(Model m)
    {
-      if (m == null) return;
+      if (m == null)
+      {
+         return;
+      }
 
       byte[] trans = m.getFaceTransparencies();
-      if (trans == null || trans.length == 0) return;
+      if (trans == null || trans.length == 0)
+      {
+         return;
+      }
 
       byte[] original = originalTransparencies.get(trans);
       if (original != null && original.length == trans.length)
@@ -787,9 +952,12 @@ public class VisibilityEnhancer extends Plugin
    private void applyOpacity(Player p, int opacityPercent)
    {
       Model model = p.getModel();
-      if (model == null) return;
+      if (model == null)
+      {
+         return;
+      }
 
-      if (model.getOverrideAmount() != 0 && !isExemptAnimation(p))
+      if (shouldForceOpaqueForOverride(p, model))
       {
          restoreOpacity(p);
          return;
@@ -802,7 +970,10 @@ public class VisibilityEnhancer extends Plugin
    private void restoreOpacity(Player p)
    {
       Model model = p.getModel();
-      if (model == null) return;
+      if (model == null)
+      {
+         return;
+      }
 
       restoreModelAlpha(model);
    }
@@ -811,6 +982,7 @@ public class VisibilityEnhancer extends Plugin
    {
       restoreOpacity(p);
       restoreClothing(p);
+      overrideStartCycle.remove(p);
 
       PlayerComposition comp = p.getPlayerComposition();
       if (comp != null)
@@ -839,6 +1011,7 @@ public class VisibilityEnhancer extends Plugin
       originalEquipmentMap.clear();
       myProjectiles.clear();
       customHitsplats.clear();
+      overrideStartCycle.clear();
 
       for (Map.Entry<byte[], byte[]> entry : originalTransparencies.entrySet())
       {
@@ -855,7 +1028,11 @@ public class VisibilityEnhancer extends Plugin
 
    private int clampAlpha(int opacityPercent)
    {
-      if (opacityPercent >= 100) return 0;
+      if (opacityPercent >= 100)
+      {
+         return 0;
+      }
+
       return (int) ((100 - opacityPercent) * 2.5);
    }
 
