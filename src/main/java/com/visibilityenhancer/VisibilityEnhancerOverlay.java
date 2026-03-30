@@ -65,7 +65,16 @@ public class VisibilityEnhancerOverlay extends Overlay
 			"Woooooooo.",
 			"Wooo...",
 			"Woo!",
-			"Woooooooooo!"
+			"Woooooooooo!",
+			"Woo.",
+			"Woooo...",
+			"Wooo ooo ooo...",
+			"Woo... woo...",
+			"W-woo?",
+			"Woooo woo.",
+			"Wooooooooooooo!",
+			"Woo wooo!",
+			"Wooo?"
 	};
 
 	private static class SpamTracker
