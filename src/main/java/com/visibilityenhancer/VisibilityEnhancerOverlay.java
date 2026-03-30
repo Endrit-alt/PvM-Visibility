@@ -50,6 +50,7 @@ public class VisibilityEnhancerOverlay extends Overlay
 	private final VisibilityEnhancerConfig config;
 	private final ModelOutlineRenderer modelOutlineRenderer;
 	private final SpriteManager spriteManager;
+	private final Map<WorldPoint, Integer> stackedTilesStartCycle = new HashMap<>();
 
 	private final Set<WorldPoint> renderedTiles = new HashSet<>();
 	private final List<Player> sortedGhosts = new ArrayList<>(32);
@@ -731,12 +732,14 @@ public class VisibilityEnhancerOverlay extends Overlay
 	{
 		if (!config.enableStackWarnings())
 		{
+			stackedTilesStartCycle.clear();
 			return;
 		}
 
 		Player local = client.getLocalPlayer();
 		if (local == null)
 		{
+			stackedTilesStartCycle.clear();
 			return;
 		}
 
@@ -745,6 +748,7 @@ public class VisibilityEnhancerOverlay extends Overlay
 			boolean inCombat = local.getInteracting() != null || local.getHealthRatio() > -1;
 			if (!inCombat)
 			{
+				stackedTilesStartCycle.clear();
 				return;
 			}
 		}
@@ -766,10 +770,11 @@ public class VisibilityEnhancerOverlay extends Overlay
 			}
 		}
 
+		Set<WorldPoint> currentlyStacked = new HashSet<>();
 		for (Map.Entry<WorldPoint, Integer> entry : tileCounts.entrySet())
 		{
-			int count = entry.getValue();
 			WorldPoint wp = entry.getKey();
+			int count = entry.getValue();
 
 			if (config.stackWarningOnlySelf() && (localPoint == null || !localPoint.equals(wp)))
 			{
@@ -778,64 +783,246 @@ public class VisibilityEnhancerOverlay extends Overlay
 
 			if (count >= config.stackThreshold())
 			{
-				LocalPoint lp = LocalPoint.fromWorld(client, wp);
-				if (lp == null)
+				currentlyStacked.add(wp);
+			}
+		}
+
+		stackedTilesStartCycle.keySet().retainAll(currentlyStacked);
+
+		int currentCycle = client.getGameCycle();
+		int delayCycles = config.stackWarningDelay() * 30;
+
+		for (WorldPoint wp : currentlyStacked)
+		{
+			int count = tileCounts.get(wp);
+
+			int startCycle = stackedTilesStartCycle.computeIfAbsent(wp, k -> currentCycle);
+			int cyclesElapsed = currentCycle - startCycle;
+
+			if (cyclesElapsed < delayCycles)
+			{
+				continue;
+			}
+
+			float fadeMultiplier = 1.0f;
+			if (cyclesElapsed < delayCycles + 30)
+			{
+				fadeMultiplier = (cyclesElapsed - delayCycles) / 30.0f;
+			}
+
+			LocalPoint lp = LocalPoint.fromWorld(client, wp);
+			if (lp == null)
+			{
+				continue;
+			}
+
+			Color baseColor = config.stackWarningColor();
+
+			double pulseRange = 0.6;
+			double sine = Math.sin(currentCycle * 0.15);
+			int basePulseAlpha = (int) (baseColor.getAlpha() * (1.0 - (pulseRange * (sine + 1.0) / 2.0)));
+			basePulseAlpha = Math.max(0, Math.min(255, basePulseAlpha));
+
+			int pulseAlpha = (int) (basePulseAlpha * fadeMultiplier);
+
+			Color pulseColor = new Color(
+					baseColor.getRed(),
+					baseColor.getGreen(),
+					baseColor.getBlue(),
+					pulseAlpha
+			);
+
+			Polygon poly = Perspective.getCanvasTilePoly(client, lp);
+			if (poly != null)
+			{
+				int pillarHeight = config.stackWarningPillarHeight();
+				Point[] basePoints = null;
+				Point[] topPoints = null;
+				boolean projectionFailed = false;
+
+				// Create a clipping area starting with the base floor polygon
+				java.awt.geom.Area clipArea = new java.awt.geom.Area(poly);
+
+				if (pillarHeight > 0)
 				{
-					continue;
+					int size = Perspective.LOCAL_TILE_SIZE / 2;
+					int[][] corners = {{-size, -size}, {size, -size}, {size, size}, {-size, size}};
+					basePoints = new Point[4];
+					topPoints = new Point[4];
+
+					for (int i = 0; i < 4; i++)
+					{
+						LocalPoint cornerLocal = new LocalPoint(lp.getX() + corners[i][0], lp.getY() + corners[i][1]);
+						basePoints[i] = Perspective.localToCanvas(client, cornerLocal, client.getPlane(), 0);
+						topPoints[i] = Perspective.localToCanvas(client, cornerLocal, client.getPlane(), pillarHeight);
+
+						if (basePoints[i] == null || topPoints[i] == null)
+						{
+							projectionFailed = true;
+							break;
+						}
+					}
 				}
 
-				Color baseColor = config.stackWarningColor();
-
-				int cycle = client.getGameCycle();
-				double pulseRange = 0.6;
-				double sine = Math.sin(cycle * 0.15);
-				int pulseAlpha = (int) (baseColor.getAlpha() * (1.0 - (pulseRange * (sine + 1.0) / 2.0)));
-				pulseAlpha = Math.max(0, Math.min(255, pulseAlpha));
-
-				Color pulseColor = new Color(
-						baseColor.getRed(),
-						baseColor.getGreen(),
-						baseColor.getBlue(),
-						pulseAlpha
-				);
-
-				Polygon poly = Perspective.getCanvasTilePoly(client, lp);
-				if (poly != null)
+				// 1. Draw the volumetric glowing light beam
+				if (pillarHeight > 0 && !projectionFailed)
 				{
-					graphics.setStroke(new BasicStroke(2));
-					graphics.setColor(pulseColor);
-					graphics.draw(poly);
+					Point bottomCenter = Perspective.localToCanvas(client, lp, client.getPlane(), 0);
+					Point topCenter = Perspective.localToCanvas(client, lp, client.getPlane(), pillarHeight);
+
+					if (bottomCenter != null && topCenter != null && bottomCenter.getY() != topCenter.getY())
+					{
+						int beamAlpha = Math.max(0, pulseAlpha / 2);
+						Color bottomColor = new Color(pulseColor.getRed(), pulseColor.getGreen(), pulseColor.getBlue(), beamAlpha);
+						Color topColor = new Color(pulseColor.getRed(), pulseColor.getGreen(), pulseColor.getBlue(), 0);
+
+						java.awt.GradientPaint beamGradient = new java.awt.GradientPaint(
+								(float) bottomCenter.getX(), (float) bottomCenter.getY(), bottomColor,
+								(float) topCenter.getX(), (float) topCenter.getY(), topColor
+						);
+						graphics.setPaint(beamGradient);
+
+						for (int i = 0; i < 4; i++)
+						{
+							int next = (i + 1) % 4;
+							Polygon wall = new Polygon();
+							wall.addPoint((int)basePoints[i].getX(), (int)basePoints[i].getY());
+							wall.addPoint((int)basePoints[next].getX(), (int)basePoints[next].getY());
+							wall.addPoint((int)topPoints[next].getX(), (int)topPoints[next].getY());
+							wall.addPoint((int)topPoints[i].getX(), (int)topPoints[i].getY());
+							graphics.fill(wall);
+
+							// Add this wall to our master clipping area
+							clipArea.add(new java.awt.geom.Area(wall));
+						}
+					}
 				}
 
-				int edgeOffset = Perspective.LOCAL_TILE_SIZE / 2;
-				LocalPoint cornerAnchor = new LocalPoint(lp.getX() + edgeOffset, lp.getY() - edgeOffset);
+				// 2. Draw the base tile outline (unclipped, so it draws cleanly)
+				graphics.setStroke(new BasicStroke(2));
+				graphics.setColor(pulseColor);
+				graphics.draw(poly);
 
-				String countText = String.valueOf(count);
-				int zOffset = 0;
-				Point textPoint = Perspective.getCanvasTextLocation(client, graphics, cornerAnchor, countText, zOffset);
-
-				if (textPoint != null)
+				// 3. Draw blurred, soft corner highlights (Clipped to stay inside)
+				if (poly.npoints == 4 && pulseAlpha > 0)
 				{
-					graphics.setFont(FontManager.getRunescapeBoldFont());
+					// Save the original clip so we can restore it later
+					java.awt.Shape originalClip = graphics.getClip();
 
-					int textAlpha = Math.min(220, baseColor.getAlpha() + 60);
+					// Set our custom clip area to slice off outward bleeding
+					graphics.setClip(clipArea);
 
-					Color textColor = new Color(
-							baseColor.getRed(),
-							baseColor.getGreen(),
-							baseColor.getBlue(),
-							textAlpha
-					);
-					Color shadowColor = new Color(0, 0, 0, textAlpha);
+					// Thickened the strokes slightly because half is now chopped off by the clip
+					Stroke glowStroke = new BasicStroke(16, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER);
+					Stroke coreStroke = new BasicStroke(4, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER);
 
-					int drawX = textPoint.getX() + 5;
-					int drawY = textPoint.getY();
+					int glowAlpha = Math.min(255, (int)(pulseAlpha * 0.30));
+					int coreAlpha = Math.min(255, (int)(pulseAlpha * 0.75));
 
-					graphics.setColor(shadowColor);
-					graphics.drawString(countText, drawX + 1, drawY + 1);
+					Color glowStart = new Color(baseColor.getRed(), baseColor.getGreen(), baseColor.getBlue(), glowAlpha);
+					Color coreStart = new Color(baseColor.getRed(), baseColor.getGreen(), baseColor.getBlue(), coreAlpha);
+					Color transparent = new Color(baseColor.getRed(), baseColor.getGreen(), baseColor.getBlue(), 0);
 
-					graphics.setColor(textColor);
-					graphics.drawString(countText, drawX, drawY);
+					for (int pass = 0; pass < 2; pass++)
+					{
+						graphics.setStroke(pass == 0 ? glowStroke : coreStroke);
+						Color startColor = pass == 0 ? glowStart : coreStart;
+
+						for (int i = 0; i < 4; i++)
+						{
+							int prev = (i + 3) % 4;
+							int next = (i + 1) % 4;
+
+							int x1 = poly.xpoints[i];
+							int y1 = poly.ypoints[i];
+
+							float edgeFraction = 0.30f;
+
+							int endXNext = (int) (x1 + (poly.xpoints[next] - x1) * edgeFraction);
+							int endYNext = (int) (y1 + (poly.ypoints[next] - y1) * edgeFraction);
+
+							int endXPrev = (int) (x1 + (poly.xpoints[prev] - x1) * edgeFraction);
+							int endYPrev = (int) (y1 + (poly.ypoints[prev] - y1) * edgeFraction);
+
+							java.awt.geom.Path2D floorCorner = new java.awt.geom.Path2D.Float();
+							floorCorner.moveTo(endXPrev, endYPrev);
+							floorCorner.lineTo(x1, y1);
+							floorCorner.lineTo(endXNext, endYNext);
+
+							float radius = (float) Math.max(1.0, Math.hypot(endXNext - x1, endYNext - y1));
+							java.awt.RadialGradientPaint rgp = new java.awt.RadialGradientPaint(
+									x1, y1, radius,
+									new float[]{0f, 1f},
+									new Color[]{startColor, transparent}
+							);
+							graphics.setPaint(rgp);
+							graphics.draw(floorCorner);
+
+							if (pillarHeight > 0 && !projectionFailed)
+							{
+								int bx = (int) basePoints[i].getX();
+								int by = (int) basePoints[i].getY();
+								int tx = (int) topPoints[i].getX();
+								int ty = (int) topPoints[i].getY();
+
+								if (bx != tx || by != ty)
+								{
+									graphics.setPaint(new java.awt.GradientPaint(bx, by, startColor, tx, ty, transparent));
+									graphics.drawLine(bx, by, tx, ty);
+								}
+							}
+						}
+					}
+
+					// Restore the original graphics clip so the text doesn't get messed up!
+					graphics.setClip(originalClip);
+				}
+
+				// 4. Draw the anchored text (if enabled)
+				if (config.showStackWarningNumber())
+				{
+					int halfSize = Perspective.LOCAL_TILE_SIZE / 2;
+					LocalPoint fixedCorner = new LocalPoint(lp.getX() - halfSize, lp.getY() - halfSize);
+
+					Point center2D = Perspective.localToCanvas(client, lp, client.getPlane());
+					Point corner2D = Perspective.localToCanvas(client, fixedCorner, client.getPlane());
+
+					if (center2D != null && corner2D != null)
+					{
+						double dx = corner2D.getX() - center2D.getX();
+						double dy = corner2D.getY() - center2D.getY();
+
+						double length = Math.sqrt(dx * dx + dy * dy);
+						if (length > 0)
+						{
+							dx /= length;
+							dy /= length;
+						}
+
+						int pixelOffset = 15;
+						int anchorX = (int) (corner2D.getX() + (dx * pixelOffset));
+						int anchorY = (int) (corner2D.getY() + (dy * pixelOffset));
+
+						String countText = String.valueOf(count);
+						graphics.setFont(FontManager.getRunescapeBoldFont());
+						FontMetrics fm = graphics.getFontMetrics();
+
+						int textWidth = fm.stringWidth(countText);
+						int textHeight = fm.getAscent();
+						int drawX = anchorX - (textWidth / 2);
+						int drawY = anchorY + (textHeight / 2) - 2;
+
+						int textAlpha = (int) (baseColor.getAlpha() * fadeMultiplier);
+
+						Color textColor = new Color(baseColor.getRed(), baseColor.getGreen(), baseColor.getBlue(), textAlpha);
+						Color shadowColor = new Color(0, 0, 0, textAlpha);
+
+						graphics.setColor(shadowColor);
+						graphics.drawString(countText, drawX + 1, drawY + 1);
+
+						graphics.setColor(textColor);
+						graphics.drawString(countText, drawX, drawY);
+					}
 				}
 			}
 		}

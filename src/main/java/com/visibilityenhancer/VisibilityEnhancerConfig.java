@@ -274,7 +274,7 @@ public interface VisibilityEnhancerConfig extends Config
 
 	@ConfigItem(
 			keyName = "stackWarningOnlyInCombat",
-			name = "Only In Combat",
+			name = "  ↳ Only In Combat",
 			position = 2,
 			section = stackSection,
 			description = "Only show stack warnings when you are actively targeting something or taking damage."
@@ -283,18 +283,27 @@ public interface VisibilityEnhancerConfig extends Config
 
 	@ConfigItem(
 			keyName = "stackWarningOnlySelf",
-			name = "Only My Tile",
+			name = "  ↳ Only My Tile",
 			position = 3,
 			section = stackSection,
 			description = "Only show the stack warning if you are standing on the stacked tile."
 	)
 	default boolean stackWarningOnlySelf() { return true; }
 
+	@ConfigItem(
+			keyName = "showStackWarningNumber",
+			name = "  ↳ Show Stack Number",
+			position = 4,
+			section = stackSection,
+			description = "Displays the number of stacked players next to the tile."
+	)
+	default boolean showStackWarningNumber() { return false; }
+
 	@Range(min = 2, max = 8)
 	@ConfigItem(
 			keyName = "stackThreshold",
 			name = "Minimum Stack Size",
-			position = 4,
+			position = 5,
 			section = stackSection,
 			description = "The minimum number of stacked players required to show the warning."
 	)
@@ -304,11 +313,31 @@ public interface VisibilityEnhancerConfig extends Config
 	@ConfigItem(
 			keyName = "stackWarningColor",
 			name = "Warning Color",
-			position = 5,
+			position = 6,
 			section = stackSection,
 			description = "Color of the pulse and text when the stack threshold is reached."
 	)
-	default Color stackWarningColor() { return new Color(255, 0, 0, 25); }
+	default Color stackWarningColor() { return new Color(255, 0, 0, 50); }
+
+	@Range(min = 0, max = 500)
+	@ConfigItem(
+			keyName = "stackWarningPillarHeight",
+			name = "Pillar Height",
+			position = 7,
+			section = stackSection,
+			description = "Height of the glowing light pillar. Set to 0 to only show the flat tile."
+	)
+	default int stackWarningPillarHeight() { return 100; }
+
+	@Range(min = 0, max = 10)
+	@ConfigItem(
+			keyName = "stackWarningDelay",
+			name = "Warning Delay (Ticks)",
+			position = 8,
+			section = stackSection,
+			description = "How many game ticks to wait before showing the stack warning. (1 tick = 0.6 seconds)"
+	)
+	default int stackWarningDelay() { return 2; }
 
 
 	// --- OUTLINE SECTION ---
