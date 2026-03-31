@@ -337,7 +337,7 @@ public interface VisibilityEnhancerConfig extends Config
 			section = stackSection,
 			description = "How many game ticks to wait before showing the stack warning. (1 tick = 0.6 seconds)"
 	)
-	default int stackWarningDelay() { return 2; }
+	default int stackWarningDelay() { return 3; }
 
 
 	// --- OUTLINE SECTION ---

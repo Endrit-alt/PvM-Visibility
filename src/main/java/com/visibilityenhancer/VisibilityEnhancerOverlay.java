@@ -50,7 +50,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 	private final VisibilityEnhancerConfig config;
 	private final ModelOutlineRenderer modelOutlineRenderer;
 	private final SpriteManager spriteManager;
-	private final Map<WorldPoint, Integer> stackedTilesStartCycle = new HashMap<>();
 
 	private final Set<WorldPoint> renderedTiles = new HashSet<>();
 	private final List<Player> sortedGhosts = new ArrayList<>(32);
@@ -76,6 +75,16 @@ public class VisibilityEnhancerOverlay extends Overlay
 			"Woo wooo!",
 			"Wooo?"
 	};
+
+	private static class StackFadeState
+	{
+		int firstSeenCycle;
+		Integer unstackCycle = null;
+		float fadeMultiplierAtUnstack = 0f;
+		int lastCount = 0;
+	}
+
+	private final Map<WorldPoint, StackFadeState> stackFadeStates = new HashMap<>();
 
 	private static class SpamTracker
 	{
@@ -641,6 +650,9 @@ public class VisibilityEnhancerOverlay extends Overlay
 			return;
 		}
 
+		// Convert engine-escaped brackets back to normal symbols
+		text = text.replace("<lt>", "<").replace("<gt>", ">");
+
 		SpamTracker tracker = spamTrackerMap.computeIfAbsent(player, p -> new SpamTracker());
 		Instant now = Instant.now();
 
@@ -741,25 +753,15 @@ public class VisibilityEnhancerOverlay extends Overlay
 	{
 		if (!config.enableStackWarnings())
 		{
-			stackedTilesStartCycle.clear();
+			stackFadeStates.clear(); // Clean up instantly if toggled off in settings
 			return;
 		}
 
 		Player local = client.getLocalPlayer();
 		if (local == null)
 		{
-			stackedTilesStartCycle.clear();
+			stackFadeStates.clear();
 			return;
-		}
-
-		if (config.stackWarningOnlyInCombat())
-		{
-			boolean inCombat = local.getInteracting() != null || local.getHealthRatio() > -1;
-			if (!inCombat)
-			{
-				stackedTilesStartCycle.clear();
-				return;
-			}
 		}
 
 		WorldPoint localPoint = local.getWorldLocation();
@@ -779,44 +781,123 @@ public class VisibilityEnhancerOverlay extends Overlay
 			}
 		}
 
+		boolean inCombat = local.getInteracting() != null || local.getHealthRatio() > -1;
+		boolean combatCheckPassed = !config.stackWarningOnlyInCombat() || inCombat;
+
 		Set<WorldPoint> currentlyStacked = new HashSet<>();
-		for (Map.Entry<WorldPoint, Integer> entry : tileCounts.entrySet())
+
+		// Only populate currentlyStacked if we pass the combat check.
+		// If we fail the check, it acts as if everything unstacked, triggering a smooth fade out.
+		if (combatCheckPassed)
 		{
-			WorldPoint wp = entry.getKey();
-			int count = entry.getValue();
-
-			if (config.stackWarningOnlySelf() && (localPoint == null || !localPoint.equals(wp)))
+			for (Map.Entry<WorldPoint, Integer> entry : tileCounts.entrySet())
 			{
-				continue;
-			}
+				WorldPoint wp = entry.getKey();
+				int count = entry.getValue();
 
-			if (count >= config.stackThreshold())
-			{
-				currentlyStacked.add(wp);
+				if (config.stackWarningOnlySelf() && (localPoint == null || !localPoint.equals(wp)))
+				{
+					continue;
+				}
+
+				if (count >= config.stackThreshold())
+				{
+					currentlyStacked.add(wp);
+				}
 			}
 		}
-
-		stackedTilesStartCycle.keySet().retainAll(currentlyStacked);
 
 		int currentCycle = client.getGameCycle();
 		int delayCycles = config.stackWarningDelay() * 30;
 
+		List<WorldPoint> toRemove = new ArrayList<>();
+
+		// 1. Update existing fade states
+		for (Map.Entry<WorldPoint, StackFadeState> entry : stackFadeStates.entrySet())
+		{
+			WorldPoint wp = entry.getKey();
+			StackFadeState state = entry.getValue();
+			boolean isStacked = currentlyStacked.contains(wp);
+
+			if (isStacked)
+			{
+				if (state.unstackCycle != null)
+				{
+					// If it was fading out but stacked again, resume fading in smoothly
+					int equivalentElapsed = (int) (state.fadeMultiplierAtUnstack * 30.0f) + delayCycles;
+					state.firstSeenCycle = currentCycle - equivalentElapsed;
+					state.unstackCycle = null;
+				}
+
+				int elapsed = currentCycle - state.firstSeenCycle;
+				if (elapsed >= delayCycles)
+				{
+					state.fadeMultiplierAtUnstack = Math.min(1.0f, (elapsed - delayCycles) / 30.0f);
+				}
+				else
+				{
+					state.fadeMultiplierAtUnstack = 0f;
+				}
+				state.lastCount = tileCounts.get(wp); // Keep the number accurate while stacked
+			}
+			else
+			{
+				if (state.unstackCycle == null)
+				{
+					state.unstackCycle = currentCycle; // Lock in the moment it stopped stacking
+				}
+
+				float fadeOutAmount = (currentCycle - state.unstackCycle) / 30.0f;
+				float currentFade = state.fadeMultiplierAtUnstack - fadeOutAmount;
+
+				if (currentFade <= 0f)
+				{
+					toRemove.add(wp);
+				}
+			}
+		}
+
+		// 2. Add brand new stacked tiles to the tracker
 		for (WorldPoint wp : currentlyStacked)
 		{
-			int count = tileCounts.get(wp);
-
-			int startCycle = stackedTilesStartCycle.computeIfAbsent(wp, k -> currentCycle);
-			int cyclesElapsed = currentCycle - startCycle;
-
-			if (cyclesElapsed < delayCycles)
+			if (!stackFadeStates.containsKey(wp))
 			{
-				continue;
+				StackFadeState newState = new StackFadeState();
+				newState.firstSeenCycle = currentCycle;
+				newState.lastCount = tileCounts.get(wp);
+				stackFadeStates.put(wp, newState);
 			}
+		}
 
-			float fadeMultiplier = 1.0f;
-			if (cyclesElapsed < delayCycles + 30)
+		for (WorldPoint wp : toRemove)
+		{
+			stackFadeStates.remove(wp);
+		}
+
+		// 3. Render all tracked states
+		for (Map.Entry<WorldPoint, StackFadeState> entry : stackFadeStates.entrySet())
+		{
+			WorldPoint wp = entry.getKey();
+			StackFadeState state = entry.getValue();
+
+			float fadeMultiplier = 0f;
+			if (state.unstackCycle != null)
 			{
-				fadeMultiplier = (cyclesElapsed - delayCycles) / 30.0f;
+				fadeMultiplier = state.fadeMultiplierAtUnstack - ((currentCycle - state.unstackCycle) / 30.0f);
+			}
+			else
+			{
+				int elapsed = currentCycle - state.firstSeenCycle;
+				if (elapsed >= delayCycles)
+				{
+					fadeMultiplier = (elapsed - delayCycles) / 30.0f;
+				}
+			}
+			fadeMultiplier = Math.max(0f, Math.min(1.0f, fadeMultiplier));
+
+			if (fadeMultiplier <= 0f)
+			{
+				continue; // Don't draw if completely invisible
 			}
 
 			LocalPoint lp = LocalPoint.fromWorld(client, wp);
@@ -826,20 +907,13 @@ public class VisibilityEnhancerOverlay extends Overlay
 			}
 
 			Color baseColor = config.stackWarningColor();
-
 			double pulseRange = 0.6;
 			double sine = Math.sin(currentCycle * 0.15);
 			int basePulseAlpha = (int) (baseColor.getAlpha() * (1.0 - (pulseRange * (sine + 1.0) / 2.0)));
 			basePulseAlpha = Math.max(0, Math.min(255, basePulseAlpha));
 
 			int pulseAlpha = (int) (basePulseAlpha * fadeMultiplier);
-
-			Color pulseColor = new Color(
-					baseColor.getRed(),
-					baseColor.getGreen(),
-					baseColor.getBlue(),
-					pulseAlpha
-			);
+			Color pulseColor = new Color(baseColor.getRed(), baseColor.getGreen(), baseColor.getBlue(), pulseAlpha);
 
 			Polygon poly = Perspective.getCanvasTilePoly(client, lp);
 			if (poly != null)
@@ -849,7 +923,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 				Point[] topPoints = null;
 				boolean projectionFailed = false;
 
-				// Create a clipping area starting with the base floor polygon
 				java.awt.geom.Area clipArea = new java.awt.geom.Area(poly);
 
 				if (pillarHeight > 0)
@@ -873,7 +946,6 @@ public class VisibilityEnhancerOverlay extends Overlay
 					}
 				}
 
-				// 1. Draw the volumetric glowing light beam
 				if (pillarHeight > 0 && !projectionFailed)
 				{
 					Point bottomCenter = Perspective.localToCanvas(client, lp, client.getPlane(), 0);
@@ -901,27 +973,20 @@ public class VisibilityEnhancerOverlay extends Overlay
 							wall.addPoint((int)topPoints[i].getX(), (int)topPoints[i].getY());
 							graphics.fill(wall);
 
-							// Add this wall to our master clipping area
 							clipArea.add(new java.awt.geom.Area(wall));
 						}
 					}
 				}
 
-				// 2. Draw the base tile outline (unclipped, so it draws cleanly)
 				graphics.setStroke(new BasicStroke(2));
 				graphics.setColor(pulseColor);
 				graphics.draw(poly);
 
-				// 3. Draw blurred, soft corner highlights (Clipped to stay inside)
 				if (poly.npoints == 4 && pulseAlpha > 0)
 				{
-					// Save the original clip so we can restore it later
 					java.awt.Shape originalClip = graphics.getClip();
-
-					// Set our custom clip area to slice off outward bleeding
 					graphics.setClip(clipArea);
 
-					// Thickened the strokes slightly because half is now chopped off by the clip
 					Stroke glowStroke = new BasicStroke(16, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER);
 					Stroke coreStroke = new BasicStroke(4, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER);
 
@@ -983,11 +1048,9 @@ public class VisibilityEnhancerOverlay extends Overlay
 						}
 					}
 
-					// Restore the original graphics clip so the text doesn't get messed up!
 					graphics.setClip(originalClip);
 				}
 
-				// 4. Draw the anchored text (if enabled)
 				if (config.showStackWarningNumber())
 				{
 					int halfSize = Perspective.LOCAL_TILE_SIZE / 2;
@@ -1012,7 +1075,8 @@ public class VisibilityEnhancerOverlay extends Overlay
 						int anchorX = (int) (corner2D.getX() + (dx * pixelOffset));
 						int anchorY = (int) (corner2D.getY() + (dy * pixelOffset));
 
-						String countText = String.valueOf(count);
+						// We use state.lastCount here so the number stays frozen as it fades out!
+						String countText = String.valueOf(state.lastCount);
 						graphics.setFont(FontManager.getRunescapeBoldFont());
 						FontMetrics fm = graphics.getFontMetrics();
 
