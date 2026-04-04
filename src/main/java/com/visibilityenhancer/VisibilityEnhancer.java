@@ -234,6 +234,19 @@ public class VisibilityEnhancer extends Plugin
            .add(2010, 2011, 1764)
            .build();
 
+   // ADD THIS: Whitelist for critical SpotAnims/Graphics (the visual effects themselves)
+   private static final Set<Integer> CRITICAL_SPOTANIMS = ImmutableSet.<Integer>builder()
+           //SpotanimID.java
+           .add(2145, 2146) //Kephri dung
+           .add(2132, 2133, 2134, 2135 ,2136, 2137) //Sight Monkey Room
+           .add(1568, 1569, 1570, 1571, 1572, 1573) //bloat
+           .add(1359, 1360, 1361, 1362, 1363, 1349, 1350, 1351) //olm
+           .add(1604, 1605) //sotesegg
+           .add (1997, 1998, 2002, 2003) //nex
+           .add (2197, 2198, 2199, 2200, 2203) //wardens
+
+           .build();
+
    @Getter
    @AllArgsConstructor
    public static class CustomHitsplat
@@ -499,7 +512,9 @@ public class VisibilityEnhancer extends Plugin
       {
          for (Player p : ghostedPlayers)
          {
-            if (p.getGraphic() != -1)
+            // FIX: Check if the graphic is critical before hiding it
+            int currentGraphic = p.getGraphic();
+            if (currentGraphic != -1 && !CRITICAL_SPOTANIMS.contains(currentGraphic))
             {
                p.setGraphic(-1);
             }
@@ -508,7 +523,11 @@ public class VisibilityEnhancer extends Plugin
             {
                for (ActorSpotAnim spotAnim : p.getSpotAnims())
                {
-                  p.removeSpotAnim(spotAnim.getId());
+                  // FIX: Check if the spot anim is critical before hiding it
+                  if (!CRITICAL_SPOTANIMS.contains(spotAnim.getId()))
+                  {
+                     p.removeSpotAnim(spotAnim.getId());
+                  }
                }
             }
          }
