@@ -229,19 +229,20 @@ public class VisibilityEnhancer extends Plugin
    );
 
    private static final Set<Integer> BOSS_PROJECTILES = ImmutableSet.<Integer>builder()
-           .add(2206, 2208, 2228, 2242, 2243, 2224, 2225, 2241, 2137, 2138, 2266)
+           .add(2206, 2208, 2228, 2242, 2243, 2224, 2225, 2241, 2137, 2138, 2139, 2266)
            .add(1583, 1584, 1585, 1586, 1591, 1596, 1598, 1604, 1605, 1606, 1607, 1608, 1555, 1560, 1577, 1578)
-           .add(1339, 1340, 1341, 1343, 1345, 1354, 1327, 1291)
+           .add(1291, 1327, 1339, 1340, 1341, 1342, 1343, 1344, 1345, 1346, 1347, 1348, 1349, 1350, 1351, 1352, 1353, 1354, 1355, 1356, 1357, 1358, 1359, 1360, 1361, 1362, 1363, 1364, 1365, 1366, 1367, 1368)
            .add(2010, 2011, 1764)
            .add(1577, 1578, 1568, 1569, 1375, 1376, 1377, 1378, 1379, 1380, 1380, 1580)    //TOB NEW
            .add(1481, 2266, 2147, 2244, 2237, 2238) //TOA NEW
+           .add(1375, 1376, 1377, 1378, 1379, 1380, 1381, 1382) //INFERNO
            .build();
 
    // ADD THIS: Whitelist for critical SpotAnims/Graphics (the visual effects themselves)
    private static final Set<Integer> CRITICAL_SPOTANIMS = ImmutableSet.<Integer>builder()
            //SpotanimID.java
            .add(2145, 2146, 317) //Kephri dung
-           .add(2132, 2133, 2134, 2135 ,2136, 2137) //Sight Monkey Room
+           .add(2132, 2133, 2134, 2135 ,2136, 2137, 2138, 2139) //Sight Monkey Room
            .add(1568, 1569, 1570, 1571, 1572, 1573) //bloat
            .add(1359, 1360, 1361, 1362, 1363, 1349, 1350, 1351) //olm
            .add(1604, 1605) //sotesegg
