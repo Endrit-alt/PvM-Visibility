@@ -181,7 +181,11 @@ public class VisibilityEnhancer extends Plugin
            11601, // Nex
            9043,  // Inferno
            5789, 6045, // Yama
-           14180  // Doom of Mokhaiotl
+           14180,  // Doom of Mokhaiotl
+           13210, // Scurrius
+           5939, //Hueycotl
+           15515, //Nightmare
+           13106 //Zalcano
    );
 
    private static final Set<Integer> EXEMPT_ANIMATIONS = ImmutableSet.<Integer>builder()
