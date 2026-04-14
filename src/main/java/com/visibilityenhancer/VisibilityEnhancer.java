@@ -587,6 +587,12 @@ public class VisibilityEnhancer extends Plugin
          return;
       }
 
+      // FIX: Capture the fresh, real gear before we apply the -1 filters again
+      if (originalEquipmentMap.containsKey(p) && p.getPlayerComposition() != null)
+      {
+         originalEquipmentMap.put(p, p.getPlayerComposition().getEquipmentIds().clone());
+      }
+
       if (p == local)
       {
          if (config.selfClearGround())
