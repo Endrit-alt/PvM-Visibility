@@ -102,6 +102,7 @@ public class VisibilityEnhancer extends Plugin
    private final Set<Player> noLongerGhosted = new HashSet<>();
 
    private boolean wasActive = false;
+   private boolean isSelfHidden = false; // Cached 0% self-opacity state
 
    // Cache the region so we don't calculate it every single frame in shouldDraw
    private int currentRegionId = -1;
@@ -729,6 +730,9 @@ public class VisibilityEnhancer extends Plugin
          currentRegionId = -1;
       }
 
+      // --- NEW: Cache the self opacity state once per tick ---
+      isSelfHidden = (config.selfOpacity() == 0);
+
       // 2. NOW check state transitions and if we should be active
       checkStateTransition();
 
@@ -935,6 +939,18 @@ public class VisibilityEnhancer extends Plugin
       {
          Player player = (Player) renderable;
 
+         // --- CORRECTED: Self 0% Opacity Cull ---
+         if (player == cachedLocalPlayer && isSelfHidden)
+         {
+            // If the engine is trying to draw the 3D model, hide it.
+            if (!drawingUI)
+            {
+               return false;
+            }
+            // If drawingUI is true (overhead text, hitsplats, etc.), it bypasses this and draws normally.
+         }
+
+         // --- ORIGINAL: Others Fallback ---
          if (!drawingUI && fallbackHiddenPlayers.contains(player))
          {
             return false;
