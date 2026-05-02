@@ -483,7 +483,7 @@ public class VisibilityEnhancer extends Plugin
             {
                hasGraphic = true;
             }
-            
+
             if (!hasGraphic && cachedLocalPlayer.getSpotAnims() != null)
             {
                for (ActorSpotAnim spotAnim : cachedLocalPlayer.getSpotAnims())
@@ -498,7 +498,6 @@ public class VisibilityEnhancer extends Plugin
          }
 
          Model model = cachedLocalPlayer.getModel();
-         // Check if they currently have an override, OR if they are still within the 2-cycle "clear" delay
          boolean hasOverride = model != null && (model.getOverrideAmount() != 0 || overrideForcedPlayers.contains(cachedLocalPlayer));
 
          localPlayerExemptFromCull = hasGraphic || hasOverride;
